@@ -1,0 +1,439 @@
+generator client {
+  provider = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id             String    @id @default(uuid()) @db.Char(36)
+  name           String    @unique @db.VarChar(30)
+  ruc            String    @unique @db.VarChar(11)
+  companyName    String    @unique @db.VarChar(50)
+  logo           String?   @db.VarChar(150) // ID único en Cloudinary
+  colorPrimary   String?   @db.VarChar(7) // Color primario en formato hexadecimal
+  colorSecondary String?   @db.VarChar(7) // Color secundario en formato hexadecimal
+  colorSidebar   String?   @db.VarChar(7) // Color de la barra lateral en formato hexadecimal
+  fontPrincipal  String?   @db.VarChar(50) // Fuente principal
+  fontSecondary  String?   @db.VarChar(50) // Fuente secundaria
+  status         Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  // RELACIONES
+  users             User[]
+  workplaces        Workplace[]
+  roles             Role[]
+  schedules         Schedule[]
+  Position          Position[]
+  DocumentType      DocumentType[]
+  Permission        Permission[]
+  PermissionType    PermissionType[]
+  ReportAttendance  ReportAttendance[]
+  ScheduleException ScheduleException[]
+
+  @@index([createdAt])
+}
+
+model Role {
+  id          String    @id @default(uuid()) @db.Char(36)
+  name        String    @db.VarChar(30)
+  description String    @db.VarChar(50)
+  status      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  // RELACIÓN CON COMPANY (Null = Rol Global)
+  companyId      String?
+  company        Company?         @relation(fields: [companyId], references: [id])
+  RoleMenu       RoleMenu[]
+  RolePermission RolePermission[]
+  users          User[]
+
+  // ÍNDICES Y CONSTRAINTS
+  @@unique([name, companyId]) // Un rol no se repite en la misma empresa
+  @@index([companyId, name])
+}
+
+model Schedule {
+  id                 String              @id @default(uuid())
+  name               String              @db.VarChar(50)
+  workplaceId        String?
+  workplace          Workplace?          @relation(fields: [workplaceId], references: [id])
+  positionId         String?
+  position           Position?           @relation(fields: [positionId], references: [id])
+  status             Boolean             @default(true)
+  scheduleRanges     ScheduleRange[]
+  scheduleChanges    ScheduleChange[]
+  scheduleExceptions ScheduleException[]
+  companyId          String?
+  company            Company?            @relation(fields: [companyId], references: [id])
+
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  deletedAt        DateTime?
+  ReportAttendance ReportAttendance[]
+
+  @@unique([workplaceId, positionId])
+  @@index([companyId])
+}
+
+model ScheduleRange {
+  id           String    @id @default(uuid())
+  schedule     Schedule  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId   String
+  startDay     DayOfWeek // Día de inicio del rango (ej: Lunes)
+  endDay       DayOfWeek // Día de fin del rango (ej: Viernes)
+  checkIn      String // Hora de entrada
+  checkOut     String // Hora de salida
+  isNightShift Boolean   @default(false) // ¿Es un turno nocturno?
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([scheduleId, startDay, endDay, checkIn, checkOut]) // Evitar duplicados
+}
+
+model ScheduleChange {
+  id          String    @id @default(uuid())
+  schedule    Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId  String? // Opcional para permitir cambios globales
+  workplaceId String? // Para cambios a nivel de área
+  positionId  String? // Para cambios a nivel de cargo
+  companyId   String? // Para cambios a nivel de empresa
+  changeDate  DateTime  @db.Date
+  newCheckIn  String
+  newCheckOut String
+  reason      String    @db.VarChar(200)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Cambio importante: permite nulos en todos los campos de relación
+  // pero asegura que al menos uno esté presente a través de validación en la aplicación
+  // La restricción check debe implementarse en la lógica de la aplicación
+  // Evitar duplicados para la misma entidad y fecha
+  @@unique([scheduleId, changeDate], name: "unique_schedule_change_date")
+  @@unique([workplaceId, changeDate], name: "unique_workplace_change_date")
+  @@unique([positionId, changeDate], name: "unique_position_change_date")
+  @@unique([companyId, changeDate], name: "unique_company_change_date")
+}
+
+model ScheduleException {
+  id          String     @id @default(uuid())
+  schedule    Schedule?  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId  String? // Opcional
+  userId      String? // Opcional para excepciones individuales
+  workplaceId String? // Para excepciones a nivel de área
+  workplace   Workplace? @relation(fields: [workplaceId], references: [id])
+
+  positionId String? // Para excepciones a nivel de cargo
+  position   Position? @relation(fields: [positionId], references: [id])
+
+  companyId String? // Para excepciones globales (ej: feriados nacionales)
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  date     DateTime @db.Date
+  checkIn  String?
+  checkOut String?
+  isDayOff Boolean  @default(false)
+  reason   String   @db.VarChar(200)
+
+  user User? @relation(fields: [userId], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Asegurar que al menos una entidad esté asociada
+  // Restricciones para evitar duplicados
+  @@unique([scheduleId, date], name: "unique_schedule_exception_date")
+  @@unique([userId, date], name: "unique_user_exception_date")
+  @@unique([workplaceId, date], name: "unique_workplace_exception_date")
+  @@unique([positionId, date], name: "unique_position_exception_date")
+  @@unique([companyId, date], name: "unique_company_exception_date")
+  @@index([userId, date])
+  @@index([scheduleId, date])
+  @@index([workplaceId, date])
+  @@index([positionId, date])
+  @@index([companyId, date])
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model DocumentType {
+  id        String    @id @default(uuid()) @db.Char(36)
+  name      String    @db.VarChar(30)
+  status    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  companyId String
+  company   Company   @relation(fields: [companyId], references: [id])
+
+  users User[]
+
+  @@unique([name, companyId])
+  @@index([id, name, createdAt(sort: Asc)])
+}
+
+model Position {
+  id          String    @id @default(uuid()) @db.Char(36)
+  name        String    @db.VarChar(30)
+  description String    @db.VarChar(50)
+  status      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  workplaceId String
+  workplace   Workplace @relation(fields: [workplaceId], references: [id])
+  companyId   String
+  company     Company   @relation(fields: [companyId], references: [id])
+
+  // RELACIONES
+  users             User[]
+  schedules         Schedule[]
+  ScheduleException ScheduleException[]
+
+  @@unique([name, workplaceId, companyId])
+  @@index([companyId, workplaceId, name])
+}
+
+model Workplace {
+  id        String    @id @default(uuid()) @db.Char(36)
+  name      String    @db.VarChar(30)
+  status    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id])
+
+  // RELACIONES
+  positions         Position[]
+  users             User[]
+  schedules         Schedule[]
+  ScheduleException ScheduleException[]
+
+  @@unique([name, companyId])
+  @@index([companyId])
+}
+
+model Permission {
+  id          String    @id @default(uuid()) @db.Char(36)
+  name        String    @db.VarChar(30)
+  description String    @db.VarChar(50)
+  module      String?   @db.VarChar(40)
+  status      Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+  companyId   String? // Null si es un permiso global
+  company     Company?  @relation(fields: [companyId], references: [id])
+
+  RolePermission RolePermission[]
+  Menu           Menu[]
+
+  @@unique([companyId, name])
+  @@index([companyId, name, createdAt(sort: Desc)])
+}
+
+model Menu {
+  id          String       @id @default(uuid())
+  label       String
+  path        String       @unique
+  icon        String
+  status      Boolean      @default(true)
+  roles       RoleMenu[] // Roles que tienen acceso a este menú
+  permissions Permission[] // Permisos requeridos para acceder al menú
+}
+
+model RoleMenu {
+  roleId    String
+  menuId    String
+  role      Role      @relation(fields: [roleId], references: [id])
+  menu      Menu      @relation(fields: [menuId], references: [id])
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([roleId, menuId])
+}
+
+model DownloadFormat {
+  id        String    @id @default(uuid()) @db.Char(36)
+  name      String    @unique @db.VarChar(30)
+  status    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@index([name, createdAt(sort: Desc)])
+}
+
+model PermissionType {
+  id           String       @id @default(uuid()) @db.Char(36)
+  name         String       @db.VarChar(30)
+  duration     Int
+  description  String       @db.VarChar(50)
+  durationUnit DurationUnit // Enum: Horas o Días
+  status       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  deletedAt    DateTime?
+  companyId    String?
+  company      Company?     @relation(fields: [companyId], references: [id])
+
+  typeAssistanceEffect AsistentType? @default(PRESENT)
+
+  ReportAttendance ReportAttendance[]
+
+  @@unique([companyId, name])
+  @@index([name, companyId, createdAt(sort: Desc)])
+}
+
+enum DurationUnit {
+  HOURS
+  DAYS
+}
+
+model User {
+  id                String              @id @default(uuid()) @db.Char(36)
+  name              String              @db.VarChar(30)
+  lastName          String              @db.VarChar(30)
+  email             String              @db.VarChar(50)
+  password          String              @db.VarChar(60)
+  numberDocument    String              @db.VarChar(20)
+  gender            Gender              @default(MALE)
+  salary            Decimal?            @db.Decimal(10, 2)
+  phoneNumber       String?             @db.VarChar(15)
+  birthDate         DateTime            @db.Date
+  refreshToken      String?             @db.Text
+  lastLogin         DateTime?
+  avatarPublicId    String?             @db.VarChar(150) // ID único en Cloudinary
+  avatarUrl         String?             @db.VarChar(150) // URL de la imagen
+  code              String              @db.VarChar(10)
+  status            Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  deletedAt         DateTime?
+  // RELACIONES (TODAS CON companyId)
+  companyId         String?
+  company           Company?            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  roleId            String?
+  role              Role?               @relation(fields: [roleId], references: [id])
+  workplaceId       String? // Campo opcional
+  workplace         Workplace?          @relation(fields: [workplaceId], references: [id]) // Relación opcional
+  positionId        String? // Campo opcional
+  position          Position?           @relation(fields: [positionId], references: [id]) // Relación opcional
+  documentTypeId    String? // Campo opcional
+  documentType      DocumentType?       @relation(fields: [documentTypeId], references: [id]) // Relación opcional
+  ReportAttendance  ReportAttendance[]
+  ScheduleException ScheduleException[]
+
+  @@unique([companyId, email], map: "unique_company_email")
+  @@unique([companyId, numberDocument], map: "unique_company_document")
+  @@unique([companyId, code], map: "unique_company_code")
+  @@index([companyId, email])
+  @@index([companyId, numberDocument])
+  @@index([roleId])
+  @@index([workplaceId])
+  @@index([positionId])
+  @@index([documentTypeId])
+  @@index([deletedAt])
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+model RolePermission {
+  permission   Permission @relation(fields: [permissionId], references: [id])
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id])
+  roleId       String
+  status       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  deletedAt    DateTime?
+
+  @@id([roleId, permissionId])
+  @@unique([roleId, permissionId], map: "unique_role_permission")
+}
+
+model ReportAttendance {
+  id                String          @id @default(uuid()) @db.Char(36)
+  scheduleId        String
+  schedule          Schedule        @relation(fields: [scheduleId], references: [id])
+  date              DateTime        @db.Date
+  checkIn           DateTime        @db.Time(6)
+  checkOut          DateTime?       @db.Time(6)
+  locationLatitude  Decimal?        @db.Decimal(9, 6)
+  locationLongitude Decimal?        @db.Decimal(9, 6)
+  locationAddress   String?         @db.VarChar(200)
+  hoursWorked       Decimal?        @db.Decimal(5, 2)
+  overtimeHours     Decimal?        @db.Decimal(5, 2)
+  description       String?         @db.VarChar(200) // Descripción para permisos o casos especiales
+  notes             String?         @db.VarChar(200)
+  user              User            @relation(fields: [userId], references: [id])
+  userId            String
+  typePermission    PermissionType? @relation(fields: [typePermissionId], references: [id])
+  typePermissionId  String?
+  typeAssistanceId  AsistentType
+  status            Boolean         @default(true)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  deletedAt         DateTime?
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id])
+
+  // Índices
+  @@unique([companyId, scheduleId, date, userId])
+  @@index([date, userId])
+}
+
+enum AsistentType {
+  PRESENT // 0
+  ABSENT // 1
+  LATE // 2
+  EARLY_EXIT // 3
+  PERMISSION_HOURS // 4
+  VACATION // 5
+  MEDICAL_LEAVE // 6
+  JUSTIFIED_ABSENCE // 7
+  INJUSTIFIED_ABSENCE // 8
+  OTHER // 9: Caso especial para descripciones personalizadas
+}
+
+model DailyAttendanceSummary {
+  id                  String   @id @default(uuid())
+  companyId           String
+  date                DateTime @db.Date
+  totalUsers          Int
+  onTimeCount         Int
+  lateCount           Int
+  absentCount         Int
+  earlyDepartureCount Int
+
+  @@unique([companyId, date])
+}

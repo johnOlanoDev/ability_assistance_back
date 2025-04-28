@@ -1,0 +1,1 @@
+Validar que los cargos al crear no existan en la misma área de trabajo 

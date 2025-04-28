@@ -1,0 +1,9 @@
+# Ignorar dependencias
+node_modules/
+
+# Ignorar archivos de configuración sensibles
+.env.local
+.env.production
+
+# Ignorar archivos generados por el build
+/dist/
