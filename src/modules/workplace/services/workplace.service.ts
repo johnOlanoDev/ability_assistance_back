@@ -7,14 +7,12 @@ import {
 } from "../types/workplace.types";
 import { AppError } from "@/middleware/errors/AppError";
 import { PermissionUtils } from "@/utils/helper/permissions.helper";
-import { CompanyRepository } from "@/modules/companies/repository/company.repository";
 
 @injectable()
 export class WorkplaceService {
   constructor(
     @inject("WorkplaceRepository")
     private workPlaceRepository: WorkplaceRepository,
-    @inject("CompanyRepository") private companyRepository: CompanyRepository,
     @inject("PermissionUtils") private permissionUtils: PermissionUtils
   ) {}
 

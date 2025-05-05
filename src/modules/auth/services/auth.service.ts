@@ -4,6 +4,7 @@ import { JwtHelper } from "@/utils/helper/jwt.helper";
 import { AppError } from "@/middleware/errors/AppError";
 import { CompanyService } from "@/modules/companies/services/company.service";
 import { RoleRepository } from "../../roles/repository/role.repository";
+import { UpdateUserDTO } from "@/modules/users/types/user.types";
 
 @injectable()
 export class AuthService {
@@ -86,7 +87,7 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  async updateLastLogin(userId: string): Promise<void> {
-    await this.userRepository.updateUser(userId, { lastLogin: new Date() });
+  async updateLastLogin(userId: string, companyId?: string): Promise<void> {
+    await this.userRepository.updateUser(userId, { lastLogin: new Date() }, companyId);
   }
 }

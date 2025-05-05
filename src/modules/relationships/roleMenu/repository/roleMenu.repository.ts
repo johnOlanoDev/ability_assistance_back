@@ -1,9 +1,25 @@
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import { inject, injectable } from "tsyringe";
-import { PrismaClient, RoleMenu, Menu } from "@prisma/client";
+
+export type Menu = {
+  id: string;
+  label: string;
+  path: string;
+  icon: string;
+  status: boolean;
+};
+
+export type RoleMenu = {
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  roleId: string;
+  menuId: string;
+};
 
 @injectable()
 export class RoleMenuRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // ✅ Obtener todos los menús asignados a un rol
   async assignedMenus(roleId: string): Promise<RoleMenu[]> {

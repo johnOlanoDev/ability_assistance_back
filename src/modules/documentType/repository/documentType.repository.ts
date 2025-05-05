@@ -1,14 +1,14 @@
 import { inject, injectable } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
 import {
   CreateDocumentType,
   DocumentTypeResponse,
   UpdateDocumentType,
 } from "../types/documentType.types";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class DocumentTypeRepository implements DocumentTypeRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todos los tipos de documentos (con filtro opcional por companyId)
   async getAllDocumentTypes(

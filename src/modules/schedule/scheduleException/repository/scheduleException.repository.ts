@@ -1,6 +1,5 @@
 // src/modules/scheduleException/infrastructure/scheduleExceptionRepository.ts
 
-import { PrismaClient } from "@prisma/client";
 import {
   CreateScheduleExceptionDTO,
   ScheduleExceptionFilters,
@@ -10,12 +9,13 @@ import {
 import { inject, injectable } from "tsyringe";
 import { IScheduleExceptionRepository } from "../port/scheduleException.port";
 import { AppError } from "@/middleware/errors/AppError";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class ScheduleExceptionRepository
   implements IScheduleExceptionRepository
 {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async findScheduleExceptionById(
     id: string
@@ -222,7 +222,7 @@ export class ScheduleExceptionRepository
         user: true,
         company: true,
         position: true,
-        workplace: true
+        workplace: true,
       },
     });
 

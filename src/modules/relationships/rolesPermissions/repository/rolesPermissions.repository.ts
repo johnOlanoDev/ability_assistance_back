@@ -1,9 +1,18 @@
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import { inject, injectable } from "tsyringe";
-import { PrismaClient, RolePermission } from "@prisma/client";
+
+export type RolePermission = {
+  status: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  roleId: string;
+  permissionId: string;
+};
 
 @injectable()
 export class RolesPermissionsRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // ✅ Obtener todas las relaciones Role-Permission
   async findAll(): Promise<RolePermission[]> {
@@ -26,12 +35,18 @@ export class RolesPermissionsRepository {
   }
 
   // ✅ Asignar un permiso a un rol (evita duplicados)
-  async create(data: { roleId: string; permissionId: string }): Promise<RolePermission> {
+  async create(data: {
+    roleId: string;
+    permissionId: string;
+  }): Promise<RolePermission> {
     return await this.prisma.rolePermission.create({ data });
   }
 
   // ✅ Asignar múltiples permisos a un rol (evita duplicados)
-  async assignPermissionsToRole(roleId: string, permissionIds: string[]): Promise<void> {
+  async assignPermissionsToRole(
+    roleId: string,
+    permissionIds: string[]
+  ): Promise<void> {
     await this.prisma.rolePermission.createMany({
       data: permissionIds.map((permissionId) => ({ roleId, permissionId })),
       skipDuplicates: true,

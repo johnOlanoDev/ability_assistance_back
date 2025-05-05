@@ -1,5 +1,4 @@
 import { injectable } from "tsyringe";
-import { PrismaClient, DayOfWeek } from "@prisma/client";
 import { IScheduleRepository } from "../port/schedule.port";
 import { inject } from "tsyringe";
 import {
@@ -8,6 +7,8 @@ import {
   UpdateScheduleDTO,
 } from "../types/schedule.types";
 import { toZonedTime } from "date-fns-tz";
+import { DayOfWeek } from "../../scheduleRange/types/scheduleRange.types";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 export const transformScheduleRanges = (schedule: any) => {
   if (!schedule) return null;
@@ -34,11 +35,11 @@ const transformCreateScheduleRanges = (ranges: any[]) => {
     checkOut: range.checkOut,
     isNightShift: range.isNightShift ?? false,
   }));
-};
+};    
 
 @injectable()
 export class ScheduleRepository implements IScheduleRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // ScheduleRepository.ts
   async getAllSchedules(

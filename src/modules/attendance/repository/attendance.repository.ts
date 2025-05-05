@@ -1,6 +1,7 @@
 import { inject, injectable } from "tsyringe";
 import { IAttendancePort } from "../port/attendance.port";
-import { Prisma, PrismaClient, ReportAttendance } from "@prisma/client";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
+import { Prisma } from "@prisma/client";
 import {
   AsistentType,
   AttendanceHistory,
@@ -26,9 +27,7 @@ const extractTime = (timestamp: string | Date | null): string => {
   }
 };
 
-const toISOString = (
-  input: Date | string | number[] | null
-): string => {
+const toISOString = (input: Date | string | number[] | null): string => {
   try {
     let date: Date;
 
@@ -89,8 +88,8 @@ const transformAttendanceData = (data: any) => {
 
   return {
     ...rest,
-    checkIn:  toISOString(data.checkIn),
-    checkOut: toISOString(data.checkOut), 
+    checkIn: toISOString(data.checkIn),
+    checkOut: toISOString(data.checkOut),
   };
 };
 
@@ -104,7 +103,7 @@ const transformAttendanceResponse = (data: any): ReportAttendanceResponse => {
 
 @injectable()
 export class AttendanceRepository implements IAttendancePort {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async getReportUserByDate(
     date: Date,
@@ -140,8 +139,8 @@ export class AttendanceRepository implements IAttendancePort {
         schedule: {
           include: {
             scheduleRanges: true,
-            scheduleChanges: true
-          }
+            scheduleChanges: true,
+          },
         },
         typePermission: true,
       },
@@ -212,6 +211,8 @@ export class AttendanceRepository implements IAttendancePort {
           locationLatitude: true,
           locationLongitude: true,
           locationAddress: true,
+          hoursWorked: true,
+          overtimeHours: true,
           typeAssistanceId: true,
           status: true,
           createdAt: true,
@@ -263,6 +264,8 @@ export class AttendanceRepository implements IAttendancePort {
         checkIn: checkIn, // Solo la hora (HH:mm)
         checkOutDate: checkInDate, // Usar la misma fecha
         checkOut: checkOut, // Solo la hora (HH:mm)
+        hoursWorked: record.hoursWorked ? record.hoursWorked.toString() : null,
+        overtimeHours: record.overtimeHours,
         locationLatitude: record.locationLatitude
           ? Number(record.locationLatitude)
           : null,
@@ -369,7 +372,9 @@ export class AttendanceRepository implements IAttendancePort {
     return transformAttendanceResponse(result);
   }
 
-  async bulkUpdateReportAttendance(updates: { id: string; typeAssistanceId: AsistentType }[]): Promise<void> {
+  async bulkUpdateReportAttendance(
+    updates: { id: string; typeAssistanceId: AsistentType }[]
+  ): Promise<void> {
     // Actualizar cada registro individualmente usando Promise.all
     await Promise.all(
       updates.map((update) =>
@@ -415,8 +420,6 @@ export class AttendanceRepository implements IAttendancePort {
       filter.userId = userId;
     }
 
-    console.log("Filtro de búsqueda:", filter);
-
     // Obtener datos de Prisma
     const attendances = await this.prisma.reportAttendance.findMany({
       where: filter,
@@ -434,8 +437,6 @@ export class AttendanceRepository implements IAttendancePort {
       },
       orderBy: [{ date: "asc" }, { userId: "asc" }],
     });
-
-    console.log("Registros encontrados:", attendances);
 
     // Transformar a tu tipo personalizado
     return attendances.map((record) => ({
@@ -468,10 +469,7 @@ export class AttendanceRepository implements IAttendancePort {
     }));
   }
 
-  async findByUserAndDate(
-    userId: string,
-    date: Date
-  ): Promise<ReportAttendance | null> {
+  async findByUserAndDate(userId: string, date: Date) {
     return this.prisma.reportAttendance.findFirst({
       where: {
         userId,
@@ -512,18 +510,21 @@ export class AttendanceRepository implements IAttendancePort {
     return result ? transformAttendanceResponse(result) : null;
   }
 
-  async findAttendanceByDateAndSchedule(date: Date, scheduleId: string): Promise<ReportAttendanceResponse[]> {
+  async findAttendanceByDateAndSchedule(
+    date: Date,
+    scheduleId: string
+  ): Promise<ReportAttendanceResponse[]> {
     // Formatear la fecha para coincidir con el formato en la base de datos
-    const formattedDate = new Date(date.toISOString().split('T')[0]);
-    
+    const formattedDate = new Date(date.toISOString().split("T")[0]);
+
     // Obtener registros de asistencia para esa fecha y horario
     const results = await this.prisma.reportAttendance.findMany({
       where: {
         date: {
-          equals: formattedDate
+          equals: formattedDate,
         },
         scheduleId: scheduleId,
-        status: true
+        status: true,
       },
       include: {
         // Incluir las relaciones necesarias
@@ -532,13 +533,13 @@ export class AttendanceRepository implements IAttendancePort {
         schedule: {
           include: {
             scheduleRanges: true,
-            scheduleChanges: true
-          }
+            scheduleChanges: true,
+          },
         },
-        typePermission: true
-      }
+        typePermission: true,
+      },
     });
-    
+
     return results.map(transformAttendanceResponse);
   }
 }

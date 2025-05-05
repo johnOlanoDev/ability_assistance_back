@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import { inject, injectable } from "tsyringe";
 import {
   CreatePermissionType,
@@ -6,12 +6,11 @@ import {
   UpdatePermissionTypeDto
 } from "../types/permissionTypes.types";
 import { IPermissionTypeRepository } from "../port/permissionTypes.repository";
-import { AppError } from "@/middleware/errors/AppError";
 
 @injectable()
 export class PermissionTypeRepository implements IPermissionTypeRepository {
 
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
   
   
   getAllPermissionsTypes(companyId?: string): Promise<PermissionTypeResponse[]> {

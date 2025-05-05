@@ -1,10 +1,10 @@
-import { PrismaClient } from "@prisma/client";
 import ExcelJS from "exceljs";
 import { format } from "date-fns";
 import { inject, injectable } from "tsyringe";
 import { Buffer } from "buffer";
 import { ReportAttendanceResponse } from "../types/attendance.types";
 import { IReportAttendanceRepository } from "../port/report.port";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 
 const safeToISOString = (value: any): string | null => {
@@ -29,7 +29,7 @@ const transformAttendanceResponse = (data: any): ReportAttendanceResponse => {
 
 @injectable()
 export class ReportAttendanceRepository implements IReportAttendanceRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async getAttendanceReports(
     take: number,

@@ -32,10 +32,7 @@ export class UserService {
   ) {}
 
   // Obtener todos los usuarios
-  async getAllUsers(user: {
-    roleId: string;
-    companyId?: string;
-  }): Promise<UserResponse[]> {
+  async getAllUsers(user: { roleId: string; companyId?: string }) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
 
     if (isSuperAdmin) {
@@ -65,10 +62,7 @@ export class UserService {
   }
 
   // Obtener un usuario por ID
-  async getUserById(
-    id: string,
-    user: { roleId: string; companyId?: string }
-  ): Promise<UserResponse | null> {
+  async getUserById(id: string, user: { roleId: string; companyId?: string }) {
     // 1. Obtener el usuario objetivo (para saber su companyId)
 
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
@@ -84,7 +78,7 @@ export class UserService {
   async createUser(
     userData: CreateUserDTO,
     user: { roleId: string; companyId?: string }
-  ): Promise<UserResponse> {
+  ) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     let companyId: string;
 
@@ -256,7 +250,7 @@ export class UserService {
     id: string,
     userDataUpdated: UpdateUserDTO,
     user: { roleId: string; companyId?: string }
-  ): Promise<UserResponse> {
+  ) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     let companyId: string | null = null;
 
@@ -345,7 +339,7 @@ export class UserService {
     id: string,
     userData: UpdateProfileDTO,
     user: { userId: string; roleId: string; companyId?: string }
-  ): Promise<UserResponse> {
+  ) {
     const existingUser = await this.userRepository.getUserById(
       id,
       user.companyId
@@ -357,10 +351,7 @@ export class UserService {
   }
 
   // Eliminar un usuario
-  async deleteUser(
-    id: string,
-    user: { roleId: string; companyId?: string }
-  ): Promise<UserResponse> {
+  async deleteUser(id: string, user: { roleId: string; companyId?: string }) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const existingUser = isSuperAdmin
       ? await this.userRepository.getUserById(id)

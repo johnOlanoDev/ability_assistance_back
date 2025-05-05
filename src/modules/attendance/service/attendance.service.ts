@@ -11,18 +11,14 @@ import { ScheduleService } from "@/modules/schedule/Schedule/service/schedule.se
 import { CompanyService } from "@/modules/companies/services/company.service";
 import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { AppError } from "@/middleware/errors/AppError";
-import { Prisma } from "@prisma/client";
 import { AttendanceRepository } from "../repository/attendance.repository";
 import {
   getReadableAddress,
   validateCoordinates,
 } from "@/utils/helper/coordinate";
-import { toZonedTime } from "date-fns-tz";
 import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
-import {
-  DurationUnit,
-  PermissionTypeResponse,
-} from "@/modules/permissionsType/types/permissionTypes.types";
+import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
+import { Decimal, DecimalType, PrismaClientKnownRequestError } from "@/prisma";
 
 @injectable()
 export class AttendanceService {
@@ -119,9 +115,8 @@ export class AttendanceService {
   async getAttendanceHistory(
     take: number,
     user: { userId: string; roleId: string; companyId?: string },
-
     cursorId?: string
-  ): Promise<{ attendanceHistory: AttendanceHistory[]; total: number }> {
+  ): Promise<{ attendanceHistory: AttendanceHistory[]; total: number}> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const companyId = isSuperAdmin ? undefined : user.companyId;
 
@@ -143,7 +138,7 @@ export class AttendanceService {
       companyId
     );
 
-    if (!activeSchedule) {
+    if (!isSuperAdmin && !activeSchedule) {
       throw new AppError(
         "No hay un horario activo para este área y cargo",
         400
@@ -172,15 +167,25 @@ export class AttendanceService {
         return false;
       }
 
-      // Lógica adicional si es necesario (por ejemplo, excluir ciertos tipos de asistencia)
+      if (!record.checkIn || !record.checkOut) {
+        return false;
+      }
       return true;
     });
 
+    const attendanceHistoryWithHours = filteredHistory.map((record) => ({
+      ...record,
+      hoursWorked: record.checkIn && record.checkOut
+        ? calculateHoursWorked(record.checkIn, record.checkOut)
+        : null,
+    }));
+
     return {
-      attendanceHistory: filteredHistory,
+      attendanceHistory: attendanceHistoryWithHours,
       total: filteredHistory.length,
     };
   }
+
 
   async registerCheckinAttendance(
     data: Partial<CreateReportAttendance>,
@@ -315,15 +320,15 @@ export class AttendanceService {
           date: new Date().toISOString(), // Fecha completa en UTC
           checkIn: utcCheckIn.toISOString(), // Hora convertida a UTC
           locationLatitude: data.locationLatitude
-            ? new Prisma.Decimal(data.locationLatitude)
+            ? new Decimal(data.locationLatitude)
             : null,
           locationLongitude: data.locationLongitude
-            ? new Prisma.Decimal(data.locationLongitude)
+            ? new Decimal(data.locationLongitude)
             : null,
           locationAddress: readableAddress || null,
           typeAssistanceId,
-          hoursWorked: new Prisma.Decimal(0),
-          overtimeHours: new Prisma.Decimal(0),
+          hoursWorked: new Decimal(0),
+          overtimeHours: new Decimal(0),
           status: true,
         }
       );
@@ -341,7 +346,7 @@ export class AttendanceService {
       return transformAttendanceResponse(responseData);
     } catch (error) {
       // Verificar si el error es por violación de restricción de unicidad
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === "P2002") {
           // Error de clave única duplicada
           throw new AppError(
@@ -425,30 +430,20 @@ export class AttendanceService {
         checkOutTimeString
       );
 
-      // Obtener la duración del permiso
-      const permissionDuration = todayAttendance.typePermission?.duration || 0;
-
-      // Calcular las horas trabajadas totales
-      /* const adjustedHoursWorked = calculateAdjustedHours(
-        hoursWorked,
-        permissionDuration
-      ); */
-
-      // Actualizar el registro de asistencia
       const updatedAttendance =
         await this.attendanceRepository.updateReportAttendance(
           todayAttendance.id || "",
           {
             checkOut: utcCheckOut.toISOString(),
             locationLatitude: data.locationLatitude
-              ? new Prisma.Decimal(data.locationLatitude)
+              ? new Decimal(data.locationLatitude)
               : todayAttendance.locationLatitude,
             locationLongitude: data.locationLongitude
-              ? new Prisma.Decimal(data.locationLongitude)
+              ? new Decimal(data.locationLongitude)
               : todayAttendance.locationLongitude,
             locationAddress: readableAddress || todayAttendance.locationAddress,
             notes: data.notes || todayAttendance.notes,
-            hoursWorked: new Prisma.Decimal(timeToDecimal(hoursWorked)),
+            hoursWorked: new Decimal(timeToDecimal(hoursWorked)),
           }
         );
 
@@ -492,11 +487,11 @@ export class AttendanceService {
     }
 
     const overtimeHours = updatedData.overtimeHours
-      ? new Prisma.Decimal(updatedData.overtimeHours)
+      ? new Decimal(updatedData.overtimeHours)
       : attendance.overtimeHours;
 
     const hoursWorked = updatedData.hoursWorked
-      ? new Prisma.Decimal(updatedData.hoursWorked)
+      ? new Decimal(updatedData.hoursWorked)
       : attendance.hoursWorked;
 
     const notes = updatedData.notes || attendance.notes;
@@ -509,10 +504,10 @@ export class AttendanceService {
       hoursWorked,
       notes,
       locationLatitude: updatedData.locationLatitude
-        ? new Prisma.Decimal(updatedData.locationLatitude)
+        ? new Decimal(updatedData.locationLatitude)
         : attendance.locationLatitude,
       locationLongitude: updatedData.locationLongitude
-        ? new Prisma.Decimal(updatedData.locationLongitude)
+        ? new Decimal(updatedData.locationLongitude)
         : attendance.locationLongitude,
       locationAddress:
         updatedData.locationAddress || attendance.locationAddress,
@@ -649,7 +644,7 @@ const transformAttendanceResponse = (data: any): ReportAttendanceResponse => {
     ...rest,
     hoursWorked: hoursWorkeds,
     permissionDuration: formatHours(permissionDurations || 0), // Horas de permiso
-    adjustedHoursWorked: (adjustedHoursWorkeds) || 0, // Horas trabajadas totales
+    adjustedHoursWorked: adjustedHoursWorkeds || 0, // Horas trabajadas totales
   };
 };
 
@@ -691,7 +686,6 @@ const calculatePermissionDuration = (data: any): number => {
   if (!data.typePermission || !data.typePermission.duration) return 0;
   return parseFloat(data.typePermission.duration);
 };
-
 
 const calculateAdjustedHoursWorked = (data: any): string => {
   // Validar que los datos necesarios estén presentes
@@ -780,9 +774,16 @@ const calculateAdjustedHoursWorked = (data: any): string => {
 
   // Restar el permiso injustificado si existe
   let adjustedTimeWithPermissionMs = adjustedTimeMs;
-  if (data.typeAssistanceId === "INJUSTIFIED_ABSENCE" && data.permissionDuration) {
-    const permissionDurationMs = parseFloat(data.permissionDuration) * 60 * 60 * 1000; // Convertir a milisegundos
-    adjustedTimeWithPermissionMs = Math.max(0, adjustedTimeMs - permissionDurationMs);
+  if (
+    data.typeAssistanceId === "INJUSTIFIED_ABSENCE" &&
+    data.permissionDuration
+  ) {
+    const permissionDurationMs =
+      parseFloat(data.permissionDuration) * 60 * 60 * 1000; // Convertir a milisegundos
+    adjustedTimeWithPermissionMs = Math.max(
+      0,
+      adjustedTimeMs - permissionDurationMs
+    );
   }
 
   // Convertir el tiempo ajustado a formato HH:mm:ss

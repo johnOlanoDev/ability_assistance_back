@@ -1,16 +1,15 @@
 import { inject, injectable } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
 import {
-  UserResponse,
   CreateUserDTO,
   UpdateUserDTO,
   UpdateProfileDTO,
 } from "../types/user.types";
 import { BcryptHelper } from "@/utils/helper/bcrypt.helper";
+import { PrismaType, DecimalType, PRISMA_TOKEN, Decimal } from "@/prisma";
 
 @injectable()
 export class UserRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todos los usuarios (con filtro opcional por companyId)
   async getAllUsers(companyId?: string) {
@@ -61,10 +60,7 @@ export class UserRepository {
   }
 
   // Obtener un usuario por ID
-  async getUserById(
-    id: string,
-    companyId?: string
-  ): Promise<UserResponse | null> {
+  async getUserById(id: string, companyId?: string) {
     return this.prisma.user.findFirst({
       where: {
         id,
@@ -82,10 +78,7 @@ export class UserRepository {
     });
   }
 
-  async findUserByEmail(
-    email: string,
-    companyId?: string
-  ): Promise<UserResponse | null> {
+  async findUserByEmail(email: string, companyId?: string) {
     return this.prisma.user.findFirst({
       where: {
         email,
@@ -112,8 +105,7 @@ export class UserRepository {
     });
   }
 
-  // Crear un nuevo usuario
-  async createUser(data: CreateUserDTO): Promise<UserResponse> {
+  async createUser(data: CreateUserDTO) {
     // Extraer los IDs de las relaciones
     const {
       roleId,
@@ -121,12 +113,18 @@ export class UserRepository {
       positionId,
       documentTypeId,
       companyId,
+      salary,
       ...restData
     } = data;
+    type DecimalInstance = InstanceType<typeof Decimal>;
+    // Procesar el campo salary correctamente si existe
+    const processedSalary: DecimalInstance | undefined =
+      salary != null ? new Decimal(String(salary)) : undefined;
 
     return await this.prisma.user.create({
       data: {
         ...restData,
+        salary: processedSalary,
         status: true,
         deletedAt: null,
         // Transformar IDs en relaciones
@@ -137,7 +135,6 @@ export class UserRepository {
           ? { connect: { id: documentTypeId } }
           : undefined,
         company: companyId ? { connect: { id: companyId } } : undefined,
-        // Manejar el avatar si es necesario
       },
       include: {
         role: true,
@@ -150,14 +147,15 @@ export class UserRepository {
   }
 
   // Actualizar un usuario
-  async updateUser(
-    id: string,
-    data: UpdateUserDTO,
-    companyId?: string
-  ): Promise<UserResponse> {
+  async updateUser(id: string, dataUser: UpdateUserDTO, companyId?: string) {
+    const { companyId: _, ...updateData } = dataUser as any;
+
     return this.prisma.user.update({
-      where: { id },
-      data: { ...data, companyId, lastLogin: new Date() },
+      where: companyId ? { id, companyId } : { id },
+      data: {
+        ...updateData,
+        lastLogin: new Date(),
+      },
       include: {
         role: true,
         company: true,
@@ -169,16 +167,13 @@ export class UserRepository {
   }
 
   // Actualizar perfil
-  async updateProfile(
-    id: string,
-    data: UpdateProfileDTO,
-    companyId?: string
-  ): Promise<UserResponse> {
+  async updateProfile(id: string, data: UpdateProfileDTO, companyId?: string) {
+    const { companyId: _, ...updateData } = data as any;
+
     return this.prisma.user.update({
-      where: { id },
+      where: { id, companyId: companyId || undefined },
       data: {
-        ...data,
-        companyId,
+        ...updateData,
         lastLogin: new Date(),
         updatedAt: new Date(),
       },
@@ -193,7 +188,7 @@ export class UserRepository {
   }
 
   // Eliminar (soft delete) un usuario
-  async softDeleteUser(id: string, companyId?: string): Promise<UserResponse> {
+  async softDeleteUser(id: string, companyId?: string) {
     return this.prisma.user.update({
       where: { id },
       data: { status: false, companyId, deletedAt: new Date() },
@@ -217,10 +212,7 @@ export class UserRepository {
   }
 
   // Obtener los roles asignados a un usuario
-  public async findRolesByUserId(
-    userId: string,
-    companyId?: string
-  ): Promise<UserResponse | null> {
+  public async findRolesByUserId(userId: string, companyId?: string) {
     return this.prisma.user.findUnique({
       where: {
         id: userId,

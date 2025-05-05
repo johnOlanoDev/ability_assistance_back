@@ -1,20 +1,17 @@
 import { inject, injectable } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import bcrypt from "bcryptjs";
-
 import { AppError } from "@/middleware/errors/AppError";
 import { logger } from "@/logger/logger";
 import {
-  ROLE_PERMISSIONS,
   allMenus,
-  
   menuAssignments,
   permissions,
 } from "../data/index";
 
 @injectable()
 export class InitializationService {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async initialize() {
     console.log("Inicializando base de datos...");

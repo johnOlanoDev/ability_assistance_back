@@ -1,4 +1,3 @@
-import { PrismaClient } from "@prisma/client";
 import {
   CreateWorkPlacesDTO,
   UpdateWorkPlacesDTO,
@@ -6,10 +5,11 @@ import {
 } from "../types/workplace.types";
 import { inject, injectable } from "tsyringe";
 import { IWorkPlaceRepository } from "../port/workplace.repository";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class WorkplaceRepository implements IWorkPlaceRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todas las áreas de trabajo (con filtro opcional por companyId)
   async getAllWorkPlaces(

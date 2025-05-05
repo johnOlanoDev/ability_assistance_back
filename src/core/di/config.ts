@@ -1,5 +1,6 @@
 import "reflect-metadata";
-import { PrismaClient } from "@/prisma/prisma";
+import { PRISMA_TOKEN, prisma } from "@/prisma";
+
 import { RoleRepository } from "../../modules/roles/repository/role.repository";
 import { RolesService } from "../../modules/roles/services/roles.service";
 import { RoleController } from "../../modules/roles/controllers/role.controller";
@@ -69,9 +70,9 @@ import { ScheduleExceptionService } from "@/modules/schedule/scheduleException/s
 import { ScheduleExceptionRepository } from "@/modules/schedule/scheduleException/repository/scheduleException.repository";
 
 export const configureDependencies = () => {
+
   // Register Prisma
-  const prisma = new PrismaClient();
-  DependencyContainer.registerInstance(PrismaClient, prisma);
+  DependencyContainer.registerInstance(PRISMA_TOKEN, prisma);
 
   // Register Repository
   DependencyContainer.registerSingleton<CompanyRepository>(

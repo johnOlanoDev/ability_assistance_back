@@ -1,9 +1,11 @@
 import { inject, injectable } from "tsyringe";
-import { Menu, PrismaClient, Role } from "@prisma/client";
+import { RoleResponse } from "@/modules/roles/types/roles.types";
+import { PrismaType, PRISMA_TOKEN } from "@/prisma";
+import { Menu } from "@/modules/relationships/roleMenu/repository/roleMenu.repository";
 
 @injectable()
 export class MenuRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async createMenu(data: { label: string; path: string; icon: string}): Promise<Menu> {
     return await this.prisma.menu.create({
@@ -25,7 +27,7 @@ export class MenuRepository {
     });
   }
   
-  async getRolesByMenuId(id: string): Promise<Role[]> {
+  async getRolesByMenuId(id: string): Promise<RoleResponse[]> {
     return await this.prisma.role.findMany({
       where: {
         RoleMenu: {

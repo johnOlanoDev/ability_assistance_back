@@ -1,5 +1,5 @@
 import { injectable, inject } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import {
   CreatePositionDTO,
   PositionResponse,
@@ -9,7 +9,7 @@ import { IPositionRepository } from "../port/IPositionRepository";
 
 @injectable()
 export class PositionRepository implements IPositionRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todas las posiciones (con filtro opcional por companyId)
   async getAllPositions(
@@ -144,7 +144,10 @@ export class PositionRepository implements IPositionRepository {
     return !!position;
   }
 
-  async findPositionById(id: string, user: { roleId: string; companyId?: string }): Promise<PositionResponse | null> {
+  async findPositionById(
+    id: string,
+    user: { roleId: string; companyId?: string }
+  ): Promise<PositionResponse | null> {
     const position = await this.prisma.position.findUnique({
       where: { id, deletedAt: null },
     });

@@ -48,6 +48,8 @@ export interface AttendanceHistory {
   checkIn: string;
   checkOutDate?: string | null;
   checkOut?: string | null;
+  hoursWorked?: string | null;
+  overtimeHours?: Decimal | null;
   locationLatitude?: number | null;
   locationLongitude?: number | null;
   locationAddress?: string | null;
@@ -56,7 +58,7 @@ export interface AttendanceHistory {
   createdAt: string;
   updatedAt: string;
   company?: CompanyResponse | null;
-  user: UserResponse;
+  user: any;
   schedule: ScheduleResponse;
 }
 

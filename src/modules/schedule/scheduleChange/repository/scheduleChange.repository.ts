@@ -1,5 +1,4 @@
 import { inject, injectable } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
 import { IScheduleChangeRepository } from "../port/scheduleChange.port";
 import {
   CreateScheduleChangeDTO,
@@ -7,10 +6,11 @@ import {
   ScheduleChangeResponse,
   UpdateScheduleChangeDTO,
 } from "../types/scheduleChange.types";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class ScheduleChangeRepository implements IScheduleChangeRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async findScheduleChangeById(
     id: string,

@@ -1,15 +1,15 @@
 import { injectable, inject } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
 import {
   CreateRoleDTO,
   RoleResponse,
   UpdateRoleDTO,
 } from "../types/roles.types";
 import { IRoleRepository } from "../port/RoleRepository";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class RoleRepository implements IRoleRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async getAllRoles(
     take: number = 10,

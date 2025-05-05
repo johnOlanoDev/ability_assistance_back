@@ -58,12 +58,6 @@ export class UserController {
 
       const userAvatar = await this.userService.getUserById(id, user);
 
-      if (!userAvatar) {
-        res.status(400).json("No se encontró al usuario");
-      } else if (!userAvatar?.avatarUrl) {
-        res.status(400).json("No se encontró el avatar del usuario");
-      }
-
       const avatar = this.cloudinaryService.getImageUrl(
         userAvatar?.avatarUrl || ""
       );

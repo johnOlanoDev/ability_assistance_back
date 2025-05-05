@@ -3,10 +3,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/app.js",
-  "type": "commonjs",
+  "type": "module",
   "scripts": {
     "test": "cross-env DATABASE_URL=$DATABASE_URL_TEST jest --detectOpenHandles --forceExit",
-    "start": "node dist/app.js",
+    "start": "node wrapper.cjs",
     "build": "tsc && node add-js-extension.mjs",
     "dev": "dotenv -e .env.development -- tsx watch src/app.ts",
     "push-dev": "dotenv -e .env.development -- npx prisma db push",

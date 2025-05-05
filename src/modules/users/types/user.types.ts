@@ -2,7 +2,7 @@ import { CompanyResponse } from "@/modules/companies/types/company.types";
 import { DocumentTypeResponse } from "@/modules/documentType/types/documentType.types";
 import { PositionResponse } from "@/modules/position/types/position.types";
 import { WorkPlacesResponse } from "@/modules/workplace/types/workplace.types";
-import { Prisma, Gender } from "@prisma/client";
+import { DecimalType } from "@/prisma";
 import { RoleResponse } from "@/modules/roles/types/roles.types";
 
 export interface UserResponse {
@@ -12,7 +12,7 @@ export interface UserResponse {
   email: string;
   numberDocument: string;
   gender: string;
-  salary?: Prisma.Decimal | null;
+  salary?: DecimalType | null;
   birthDate: Date;
   avatarPublicId?: string | null;
   avatarUrl?: string | null;
@@ -41,7 +41,7 @@ export type CreateUserDTO = {
   password: string;
   numberDocument: string;
   gender: Gender;
-  salary?: Prisma.Decimal | null;
+  salary?: DecimalType | null;
   birthDate: Date;
   phoneNumber?: string | null;
   avatarPublicId?: string | null;
@@ -60,19 +60,39 @@ export type CreateUserDTO = {
 };
 
 export type UpdateUserDTO = Partial<
-  Omit<
+  Pick<
     CreateUserDTO,
-    "email, status, companyId, workplaceId, positionId, documentTypeId, numberDocument, roleId, code"
+    | "email"
+    | "status"
+    | "companyId"
+    | "workplaceId"
+    | "positionId"
+    | "documentTypeId"
+    | "numberDocument"
+    | "roleId"
+    | "code"
   > & {
     avatarFile?: Buffer;
+    lastLogin?: Date; // Agrega lastLogin como propiedad opcional
   }
 >;
 
 // Solo campos básicos (perfil)
 // user.dto.ts
 export type UpdateProfileDTO = Partial<
-  Pick<CreateUserDTO, "name" | "lastName" | "salary" | "phoneNumber" | "birthDate"> & {
-    avatarUrl?: string;       // URL de la imagen
-    avatarPublicId?: string;  // Public ID de Cloudinary
+  Pick<
+    CreateUserDTO,
+    "name" | "lastName" | "salary" | "phoneNumber" | "birthDate"
+  > & {
+    avatarUrl?: string; // URL de la imagen
+    avatarPublicId?: string; // Public ID de Cloudinary
   }
 >;
+
+export const Gender = {
+  MALE: "MALE",
+  FEMALE: "FEMALE",
+  OTHER: "OTHER",
+} as const;
+
+export type Gender = (typeof Gender)[keyof typeof Gender];

@@ -1,10 +1,10 @@
 import { AsistentType } from "@/modules/attendance/types/attendance.types";
-import { PrismaClient } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 @injectable()
 export class DashboardRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Helper para obtener la fecha de hoy sin la parte horaria
   private getToday(): Date {

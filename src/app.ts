@@ -1,7 +1,7 @@
 import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import morgan from "morgan";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "./prisma";
 import { configureDependencies } from "./core/di/config";
 import { getRoutes } from "./routes/index.routes";
 import { errorHandler } from "./middleware/errors/errorHandler";
@@ -17,7 +17,7 @@ async function bootstrap() {
   const app = express();
   app.use(
     cors({
-      origin: "*",
+      origin: "https://abilityapps.com.pe",
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     })
@@ -41,7 +41,6 @@ async function bootstrap() {
 
   console.log("Starting server...🚀");
 
-  const prisma = new PrismaClient();
   const PORT = process.env.PORT;
 
   try {
@@ -83,7 +82,7 @@ async function bootstrap() {
 }
 
 // Manejadores globales para excepciones no manejadas
-process.on("uncaughtException", (err: any) => {
+process.on("uncaughtException", (err) => {
   logger.error("Excepción no manejada:", err.message);
   logger.error(err.stack);
   process.exit(1); // Detener el servidor de manera segura

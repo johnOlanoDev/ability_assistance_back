@@ -5,7 +5,15 @@ import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { inject } from "tsyringe";
 import { injectable } from "tsyringe";
 import { RolesPermissionsRepository } from "../repository/rolesPermissions.repository";
-import { RolePermission } from "@prisma/client";
+
+export type RolePermission = {
+  status: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt: Date | null;
+  permissionId: string;
+  roleId: string;
+};
 
 @injectable()
 export class RolePermissionService {

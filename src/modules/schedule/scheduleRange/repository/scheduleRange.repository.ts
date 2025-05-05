@@ -1,4 +1,3 @@
-import { PrismaClient } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
 import {
   DayOfWeek, 
@@ -6,6 +5,7 @@ import {
   ScheduleRangeResponse,
   UpdateOrCreateScheduleRangeDTO,
 } from "../types/scheduleRange.types";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 
 const transformResponse = (data: any): ScheduleRangeResponse | null => {
   if (!data) return null;
@@ -23,7 +23,7 @@ const cleanData = (obj: Record<string, any>) =>
 
 @injectable()
 export class ScheduleRangeRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   async createScheduleRange(
     data: CreateScheduleRangeDTO

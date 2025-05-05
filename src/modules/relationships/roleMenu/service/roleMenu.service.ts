@@ -1,14 +1,11 @@
 import { inject, injectable } from "tsyringe";
-import { Menu } from "@prisma/client";
-import { RoleMenuRepository } from "../repository/roleMenu.repository";
-import { MenuRepository } from "@/modules/menu/repository/menu.repository";
+import { Menu, RoleMenuRepository } from "../repository/roleMenu.repository";
 
 @injectable()
 export class RoleMenuService {
   constructor(
     @inject("RoleMenuRepository")
     private roleMenuRepository: RoleMenuRepository,
-    @inject("MenuRepository") private menuRepository: MenuRepository
   ) {}
 
   // Asignar menús a un rol evitando duplicados

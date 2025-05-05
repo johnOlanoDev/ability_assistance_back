@@ -1,4 +1,3 @@
-import { DayOfWeek } from "@prisma/client";
 import { param, body } from "express-validator";
 
 export const idScheduleParamValidation = [
@@ -23,5 +22,4 @@ export const createScheduleValidation = [
     .withMessage("El horario debe tener al menos un rango")
     .notEmpty()
     .withMessage("El horario debe tener al menos un rango"),
-
 ];

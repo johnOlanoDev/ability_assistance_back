@@ -1,5 +1,5 @@
-import { PrismaClient } from "@prisma/client";
 import { inject, injectable } from "tsyringe";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import {
   CreatePermissionDTO,
   PermissionResponse,
@@ -9,13 +9,12 @@ import { AppError } from "@/middleware/errors/AppError";
 
 @injectable()
 export class PermissionRepository implements IPermissionRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todos los permisos
   async getAllPermissions(
     companyId?: string
   ): Promise<{ permissions: PermissionResponse[]; total: number }> {
-    
     const permissionResults = await this.prisma.$transaction([
       this.prisma.permission.findMany({
         where: {
@@ -27,14 +26,14 @@ export class PermissionRepository implements IPermissionRepository {
         include: { company: true },
       }),
     ]);
-    
+
     // Extract the actual permissions from the results array
     const permissions = permissionResults[0] as PermissionResponse[];
-    
+
     const total = await this.prisma.permission.count({
       where: { companyId, status: true },
     });
-    
+
     return { permissions, total };
   }
 
@@ -143,13 +142,10 @@ export class PermissionRepository implements IPermissionRepository {
     return filteredPermissions.map((rp) => rp.permission.name);
   }
 
-
   async getPermissionName(
     name: string,
     companyId?: string
   ): Promise<PermissionResponse | null> {
     return this.prisma.permission.findFirst({ where: { name, companyId } });
   }
-
 }
-

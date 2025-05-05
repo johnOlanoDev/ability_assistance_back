@@ -1,5 +1,5 @@
 import { inject, injectable } from "tsyringe";
-import { PrismaClient } from "@prisma/client";
+import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import {
   CompanyResponse,
   CreateCompanyDTO,
@@ -9,7 +9,7 @@ import { ICompanyRepository } from "../port/ICompanyRepository";
 
 @injectable()
 export class CompanyRepository implements ICompanyRepository {
-  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
+  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todas las empresas
   async getAllCompanies(

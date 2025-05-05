@@ -16,6 +16,7 @@ export class AuthController {
   login = async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { email, password } = req.body;
+      console.log(email, password)
       const token = await this.authService.login(email, password);
       sendResponseSuccess(res, 200, "Inicio de sesión exitoso", token, true )
     } catch (error) {
