@@ -53,7 +53,7 @@ router.get(
   getDocumentTypeById
 );
 router.post(
-  "save",
+  "/save",
   authenticate,
   requiredPermissions(["document:manage"]),
   createDocumentValidation,

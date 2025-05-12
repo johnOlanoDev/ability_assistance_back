@@ -2,7 +2,11 @@ import { inject, injectable } from "tsyringe";
 import { DashboardRepository } from "../repository/dashboard.repository";
 import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { AppError } from "@/middleware/errors/AppError";
-import { DateRangeFilter, getDateRange } from "@/utils/helper/dateRange";
+import {
+  CustomDateRange,
+  DateRangeFilter,
+  getDateRange,
+} from "@/utils/helper/dateRange";
 
 @injectable()
 export class DashboardService {
@@ -17,6 +21,47 @@ export class DashboardService {
 
     if (!isSuperAdmin && !user.companyId) {
       throw new AppError("La compañía es requerida para este usuario", 400);
+    }
+  }
+
+  async getAttendanceMetricsByDepartment(
+    user: { roleId: string; companyId?: string },
+    workplaceName?: string,
+    positionName?: string
+  ) {
+    try {
+      // 1. Determinar si es superadmin
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      // 2. Si el usuario no es superadmin, validar que tenga una compañía asignada
+      if (!isSuperAdmin && !user.companyId) {
+        throw new AppError(
+          "Se requiere una compañía para usuarios que no son superadmin",
+          400
+        );
+      }
+
+      // 3. Determinar el companyId basado en el rol (undefined para superadmin)
+      const companyId = isSuperAdmin ? undefined : user.companyId;
+
+      if (isSuperAdmin) {
+        return this.dashboardRepository.getAttendanceMetricsByDepartment(
+          workplaceName,
+          positionName
+        );
+      }
+
+      return this.dashboardRepository.getAttendanceMetricsByDepartment(
+        workplaceName,
+        positionName,
+        companyId
+      );
+    } catch (error: any) {
+      throw new AppError(
+        "Error al obtener el gráfico de asistencias por departamento",
+        500,
+        error
+      );
     }
   }
 
@@ -101,7 +146,7 @@ export class DashboardService {
   }
 
   async getRecentAttendanceRecords(
-    limit: number = 10,
+    limit: number = 20,
     user: {
       roleId: string;
       companyId?: string;
@@ -135,18 +180,21 @@ export class DashboardService {
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
       const { start, end } = getDateRange(filter);
       const companyId = isSuperAdmin ? undefined : user.companyId;
-  
       // Construir las condiciones de fecha solo si start y end están definidos
       const dateCondition = start && end ? { gte: start, lte: end } : undefined;
-  
+
       const [total, presences, lates, absences] = await Promise.all([
-        this.dashboardRepository.countTotalRecordsBetween(dateCondition, companyId),
-        this.dashboardRepository.countPresencesBetween(dateCondition, companyId),
+        this.dashboardRepository.countTotalRecordsBetween(
+          dateCondition,
+          companyId
+        ),
+        this.dashboardRepository.countPresencesBetween(
+          dateCondition,
+          companyId
+        ),
         this.dashboardRepository.countLatesBetween(dateCondition, companyId),
         this.dashboardRepository.countAbsencesBetween(dateCondition, companyId),
       ]);
-  
-      console.log(dateCondition)
 
       return {
         totalRecords: total,
@@ -156,6 +204,104 @@ export class DashboardService {
       };
     } catch (error) {
       throw new AppError("Error al obtener las métricas del dashboard", 500);
+    }
+  }
+
+  async getMonthlyAttendanceRate(user: { roleId: string; companyId?: string }) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      return this.dashboardRepository.getMonthlyAttendanceRate(
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener tasa de asistencia", 500);
+    }
+  }
+
+  async getMonthlyLateRate(user: { roleId: string; companyId?: string }) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      return this.dashboardRepository.getMonthlyLateRate(
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener tasa de tardanzas", 500);
+    }
+  }
+
+  async getMonthlyAbsenceRate(user: { roleId: string; companyId?: string }) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      return this.dashboardRepository.getMonthlyAbsenceRate(
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener tasa de ausencias", 500);
+    }
+  }
+
+  async getMonthlyWorkedHours(user: { roleId: string; companyId?: string }) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      return this.dashboardRepository.getMonthlyWorkedHours(
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener horas trabajadas", 500);
+    }
+  }
+
+  async getLateAttendancesThisMonth(
+    user: {
+      roleId: string;
+      companyId?: string;
+    },
+    filterRange: DateRangeFilter = "month",
+    customRange?: CustomDateRange
+  ) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      const range = getDateRange(filterRange, customRange);
+
+      return this.dashboardRepository.getLateAttendancesThisMonth(
+        range,
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener asistencias tardías", 500);
+    }
+  }
+
+  async getPermissionsAttendancesThisMonth(
+    user: {
+      roleId: string;
+      companyId?: string;
+    },
+    filterRange: DateRangeFilter = "month",
+    customRange?: CustomDateRange
+  ) {
+    try {
+      await this.validateCompany(user);
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      const range = getDateRange(filterRange, customRange);
+
+      return this.dashboardRepository.getPermissionsAttendancesThisMonth(
+        range,
+        isSuperAdmin ? undefined : user.companyId
+      );
+    } catch (error) {
+      throw new AppError("Error al obtener asistencias tardías", 500);
     }
   }
 }

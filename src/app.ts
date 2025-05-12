@@ -15,9 +15,20 @@ configureDependencies();
 async function bootstrap() {
   const routes = await getRoutes(); // Obtener las rutas de forma asíncrona
   const app = express();
+  const allowedOrigins = [
+    "http://localhost:3001", // local
+    "http://localhost:5000", // Vite
+    "https://abilityapps.com.pe", // producción
+  ];
   app.use(
     cors({
-      origin: "https://abilityapps.com.pe",
+      origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true); // origen permitido
+        } else {
+          callback(new Error("No autorizado por CORS"));
+        }
+      },
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       allowedHeaders: ["Content-Type", "Authorization"],
     })
@@ -27,7 +38,6 @@ async function bootstrap() {
   app.use(express.static("public"));
   app.options("*", cors()); // responde automáticamente a OPTIONS con los headers
   app.use(morgan("dev"));
-  app.use(express.json());
   app.use("/api/", routes);
   app.use("/api/test", (req, res) => {
     res.json({ message: "Hello World" });

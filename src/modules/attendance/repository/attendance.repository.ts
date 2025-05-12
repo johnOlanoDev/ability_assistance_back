@@ -185,46 +185,40 @@ export class AttendanceRepository implements IAttendancePort {
     return results.map(transformAttendanceResponse);
   }
 
-  async getAttendanceHistory(
-    user: { userId: string; roleId: string; companyId?: string },
-    skip: number,
-    cursorId?: string
-  ): Promise<{ attendanceHistory: AttendanceHistory[]; total: number }> {
+  async getAttendanceHistory(user: {
+    userId: string;
+    roleId: string;
+    companyId?: string;
+  }): Promise<AttendanceHistory[]> {
     const { userId, companyId } = user;
     const query = {
       where: { userId, companyId: companyId || undefined },
-      take: 10,
-      skip: skip || 0,
-      ...(cursorId && { cursor: { id: cursorId }, skip: 1 }),
     };
 
-    const [records, total] = await Promise.all([
-      this.prisma.reportAttendance.findMany({
-        ...query,
-        select: {
-          id: true,
-          userId: true,
-          companyId: true,
-          date: true,
-          checkIn: true,
-          checkOut: true,
-          locationLatitude: true,
-          locationLongitude: true,
-          locationAddress: true,
-          hoursWorked: true,
-          overtimeHours: true,
-          typeAssistanceId: true,
-          status: true,
-          createdAt: true,
-          updatedAt: true,
-          company: true,
-          user: true,
-          schedule: true,
-          typePermission: true,
-        },
-      }),
-      this.prisma.reportAttendance.count({ where: { userId, companyId } }),
-    ]);
+    const records = await this.prisma.reportAttendance.findMany({
+      ...query,
+      select: {
+        id: true,
+        userId: true,
+        companyId: true,
+        date: true,
+        checkIn: true,
+        checkOut: true,
+        locationLatitude: true,
+        locationLongitude: true,
+        locationAddress: true,
+        hoursWorked: true,
+        overtimeHours: true,
+        typeAssistanceId: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+        company: true,
+        user: true,
+        schedule: true,
+        typePermission: true,
+      },
+    });
 
     // Procesar los registros
     const attendanceHistory = records.map((record) => {
@@ -264,7 +258,7 @@ export class AttendanceRepository implements IAttendancePort {
         checkIn: checkIn, // Solo la hora (HH:mm)
         checkOutDate: checkInDate, // Usar la misma fecha
         checkOut: checkOut, // Solo la hora (HH:mm)
-        hoursWorked: record.hoursWorked ? record.hoursWorked.toString() : null,
+        hoursWorked: record.hoursWorked,
         overtimeHours: record.overtimeHours,
         locationLatitude: record.locationLatitude
           ? Number(record.locationLatitude)
@@ -280,7 +274,7 @@ export class AttendanceRepository implements IAttendancePort {
       };
     });
 
-    return { attendanceHistory, total };
+    return attendanceHistory;
   }
 
   async createReportAttendance(
@@ -291,7 +285,9 @@ export class AttendanceRepository implements IAttendancePort {
         ...transformAttendanceData(data),
         status: true,
         user: { connect: { id: data.userId } },
-        companyId: data.companyId ? data.companyId : undefined,
+        company: data.companyId
+          ? { connect: { id: data.companyId } }
+          : undefined,
         locationLatitude: data.locationLatitude,
         locationLongitude: data.locationLongitude,
         locationAddress: data.locationAddress,

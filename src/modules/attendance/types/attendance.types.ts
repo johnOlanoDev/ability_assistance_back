@@ -3,6 +3,7 @@ import { CompanyResponse } from "@/modules/companies/types/company.types";
 import { ScheduleResponse } from "@/modules/schedule/Schedule/types/schedule.types";
 import { UserResponse } from "@/modules/users/types/user.types";
 import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
+import { RoleResponse } from "@/modules/roles/types/roles.types";
 
 export interface ReportAttendanceResponse {
   id?: string;
@@ -11,15 +12,12 @@ export interface ReportAttendanceResponse {
   companyId?: string | null;
   company?: CompanyResponse | null;
   date?: string;
-
   // Fecha y hora de entrada
   checkInDate?: string;
   checkIn?: string;
-
   // Fecha y hora de salida
   checkOutDate?: string;
   checkOut?: string;
-
   // Latitud y longitud
   locationLatitude?: Decimal | null;
   locationLongitude?: Decimal | null;
@@ -33,6 +31,7 @@ export interface ReportAttendanceResponse {
   typePermissionId?: string;
   typePermission?: PermissionTypeResponse | null;
   typeAssistanceId?: AsistentType;
+  role?: RoleResponse | null;
   status?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -48,7 +47,7 @@ export interface AttendanceHistory {
   checkIn: string;
   checkOutDate?: string | null;
   checkOut?: string | null;
-  hoursWorked?: string | null;
+  hoursWorked?: Decimal | null;
   overtimeHours?: Decimal | null;
   locationLatitude?: number | null;
   locationLongitude?: number | null;

@@ -28,14 +28,14 @@ export class ScheduleChangeRepository implements IScheduleChangeRepository {
 
   async findScheduleChangesByFilters(
     filters: ScheduleChangeFilters,
-    coompanyId?: string
+    companyId?: string
   ): Promise<ScheduleChangeResponse[]> {
-    const { scheduleId, workplaceId, positionId, companyId, fromDate, toDate } =
+    const { scheduleId, workplaceId, positionId, fromDate, toDate } =
       filters;
 
     const where: any = {
       deletedAt: null,
-      companyId: coompanyId || undefined,
+      companyId: companyId || undefined,
       ...(scheduleId && { scheduleId }),
       ...(workplaceId && { workplaceId }),
       ...(positionId && { positionId }),
@@ -51,7 +51,11 @@ export class ScheduleChangeRepository implements IScheduleChangeRepository {
     const scheduleChanges = await this.prisma.scheduleChange.findMany({
       where,
       include: {
-        schedule: true,
+        schedule: {
+          include: {
+            scheduleChanges: true
+          }
+        },
       },
       orderBy: { changeDate: "asc" },
     });
@@ -124,10 +128,8 @@ export class ScheduleChangeRepository implements IScheduleChangeRepository {
   }
 
   async deleteScheduleChange(id: string, companyId?: string): Promise<boolean> {
-    const now = new Date();
-    await this.prisma.scheduleChange.update({
+    await this.prisma.scheduleChange.delete({
       where: { id, companyId: companyId || undefined, deletedAt: null },
-      data: { deletedAt: now },
     });
     return true;
   }

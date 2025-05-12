@@ -18,7 +18,7 @@ import {
 } from "@/utils/helper/coordinate";
 import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
 import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
-import { Decimal, DecimalType, PrismaClientKnownRequestError } from "@/prisma";
+import { Decimal, PrismaClientKnownRequestError } from "@/prisma";
 
 @injectable()
 export class AttendanceService {
@@ -112,11 +112,11 @@ export class AttendanceService {
     return data;
   }
 
-  async getAttendanceHistory(
-    take: number,
-    user: { userId: string; roleId: string; companyId?: string },
-    cursorId?: string
-  ): Promise<{ attendanceHistory: AttendanceHistory[]; total: number}> {
+  async getAttendanceHistory(user: {
+    userId: string;
+    roleId: string;
+    companyId?: string;
+  }) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const companyId = isSuperAdmin ? undefined : user.companyId;
 
@@ -154,38 +154,31 @@ export class AttendanceService {
       }
     }
     // 5. Obtener el historial de asistencia desde el repositorio
-    const data = await this.attendanceRepository.getAttendanceHistory(
-      user,
-      take,
-      cursorId
-    );
+    const data = await this.attendanceRepository.getAttendanceHistory(user);
 
     // 6. Filtrar los datos según el rol del usuario
-    const filteredHistory = data.attendanceHistory.filter((record) => {
+    const filteredHistory = data.filter((record) => {
       // Solo mostrar registros relacionados con la empresa del usuario
-      if (companyId && record.companyId !== companyId) {
-        return false;
+      if (!isSuperAdmin) {
+        if (companyId && record.companyId !== companyId) {
+          return false;
+        }
       }
-
+      /* 
       if (!record.checkIn || !record.checkOut) {
         return false;
-      }
+      } */
       return true;
     });
 
-    const attendanceHistoryWithHours = filteredHistory.map((record) => ({
+    return filteredHistory.map((record) => ({
       ...record,
-      hoursWorked: record.checkIn && record.checkOut
-        ? calculateHoursWorked(record.checkIn, record.checkOut)
-        : null,
+      hoursWorked:
+        record.checkIn && record.checkOut
+          ? calculateHoursWorked(record.checkIn, record.checkOut)
+          : null,
     }));
-
-    return {
-      attendanceHistory: attendanceHistoryWithHours,
-      total: filteredHistory.length,
-    };
   }
-
 
   async registerCheckinAttendance(
     data: Partial<CreateReportAttendance>,

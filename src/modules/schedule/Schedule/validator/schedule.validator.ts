@@ -85,20 +85,25 @@ export class ScheduleValidator {
     if (isSuperAdmin) {
       return;
     }
-    if (!workplaceId) {
-      throw new AppError("El id del área de trabajo es requerido", 400);
-    }
-    if (!user.companyId) {
-      throw new AppError("No tienes permiso para ver áreas de trabajo", 403);
-    }
 
-    if (user.companyId !== workplaceId) {
+    if (!workplaceId)
+      throw new AppError("El id del área de trabajo es requerido", 400);
+
+    if (!user.companyId)
+      throw new AppError("No tienes permiso para ver áreas de trabajo", 403);
+
+    const workplaceFind = await this.workplaceRepository.findWorkplaceById(
+      workplaceId,
+      user
+    );
+
+    if (workplaceId !== workplaceFind?.id) {
       throw new AppError(
         "No tienes permiso para ver esta área de trabajo",
         403
       );
     }
-    if (user.companyId === workplaceId) {
+    if (workplaceFind?.id === workplaceId) {
       const workplace = await this.workplaceRepository.findWorkplaceById(
         workplaceId,
         user
@@ -125,14 +130,18 @@ export class ScheduleValidator {
       throw new AppError("No tienes permiso para ver áreas de trabajo", 403);
     }
 
-    if (user.companyId !== workplaceId) {
+    const workplaceFind = await this.workplaceRepository.findWorkplaceById(
+      workplaceId,
+      user
+    );
+
+    if (workplaceId !== workplaceFind?.id) {
       throw new AppError(
         "No tienes permiso para ver esta área de trabajo",
         403
       );
     }
-
-    if (user.companyId === workplaceId) {
+    if (workplaceFind?.id === workplaceId) {
       const workplace = await this.workplaceRepository.findWorkplaceById(
         workplaceId,
         user
@@ -159,11 +168,16 @@ export class ScheduleValidator {
       throw new AppError("No tienes permiso para ver posiciones", 403);
     }
 
-    if (user.companyId !== positionId) {
+    const positionRepository = await this.positionRepository.findPositionById(
+      positionId,
+      user
+    );
+
+    if (positionRepository?.id !== positionId) {
       throw new AppError("No tienes permiso para ver esta posición", 403);
     }
 
-    if (user.companyId === positionId) {
+    if (positionRepository?.id === positionId) {
       const position = await this.positionRepository.findPositionById(
         positionId,
         user
@@ -190,11 +204,16 @@ export class ScheduleValidator {
       throw new AppError("No tienes permiso para ver posiciones", 403);
     }
 
-    if (user.companyId !== positionId) {
+    const positionRepository = await this.positionRepository.findPositionById(
+      positionId,
+      user
+    );
+
+    if (positionRepository?.id !== positionId) {
       throw new AppError("No tienes permiso para ver esta posición", 403);
     }
 
-    if (user.companyId === positionId) {
+    if (positionRepository?.id === positionId) {
       const position = await this.positionRepository.findPositionById(
         positionId,
         user
@@ -304,10 +323,7 @@ export class ScheduleValidator {
     workplaceId?: string,
     positionId?: string
   ) {
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    if (isSuperAdmin) {
-      return;
-    }
+    
     if (!workplaceId) {
       throw new AppError("El id del área de trabajo es requerido", 400);
     }
@@ -319,9 +335,19 @@ export class ScheduleValidator {
     if (!user.companyId) {
       throw new AppError("No tienes permiso para ver horarios", 403);
     }
-    if (user.companyId !== workplaceId) {
-      throw new AppError("No tienes permiso para ver este horario", 403);
-    }
+
+    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    
+    const workplaceFind = await this.workplaceRepository.findWorkplaceById(
+      workplaceId,
+      user
+    );
+
+    if (isSuperAdmin) return;
+
+
+    if (workplaceFind?.id !== workplaceId) throw new AppError("No tienes permiso para ver este horario", 403);
+    
     if (user.companyId === workplaceId) {
       const schedule =
         await this.scheduleRepository.findScheduleByWorkplaceAndPosition(

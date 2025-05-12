@@ -75,7 +75,7 @@ export class ScheduleService {
 
     return data;
   };
-  
+
   // Función para convertir una hora en formato HH:mm:ss a un objeto Date
   parseTimeStringToDate = (timeString: string): Date => {
     if (!timeString) throw new Error("Hora inválida");
@@ -110,47 +110,71 @@ export class ScheduleService {
   ): Promise<ScheduleResponse> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const companyId = isSuperAdmin ? undefined : user.companyId;
-  
-  
+
     // 👉 Validaciones sólo si NO es SuperAdmin
     if (!isSuperAdmin) {
       await Promise.all([
         this.scheduleValidator.validateCompanyExists(user, companyId),
-        this.scheduleValidator.validateWorkplaceExists(user, scheduleData.workplaceId ?? undefined),
-        this.scheduleValidator.validatePositionExists(user, scheduleData.positionId ?? undefined),
+        this.scheduleValidator.validateWorkplaceExists(
+          user,
+          scheduleData.workplaceId ?? undefined
+        ),
+        this.scheduleValidator.validatePositionExists(
+          user,
+          scheduleData.positionId ?? undefined
+        ),
         this.scheduleValidator.validateCompanyActive(user, companyId),
-        this.scheduleValidator.validateWorkplaceActive(user, scheduleData.workplaceId ?? undefined),
-        this.scheduleValidator.validatePositionActive(user, scheduleData.positionId ?? undefined),
-        this.scheduleValidator.validateScheduleExists(user, scheduleData.workplaceId ?? undefined, scheduleData.positionId),
-        this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(user, scheduleData.workplaceId ?? undefined, scheduleData.positionId, companyId),
+        this.scheduleValidator.validateWorkplaceActive(
+          user,
+          scheduleData.workplaceId ?? undefined
+        ),
+        this.scheduleValidator.validatePositionActive(
+          user,
+          scheduleData.positionId ?? undefined
+        ),
+        this.scheduleValidator.validateScheduleExists(
+          user,
+          scheduleData.workplaceId ?? undefined,
+          scheduleData.positionId
+        ),
+        this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(
+          user,
+          scheduleData.workplaceId ?? undefined,
+          scheduleData.positionId,
+          companyId
+        ),
       ]);
     }
-  
+
     try {
       const scheduleToCreate = {
         ...scheduleData,
         companyId: companyId, // Puede ser undefined si es superadmin
-        scheduleRanges: scheduleData.scheduleRanges?.map((range) => ({
-          startDay: range.startDay,
-          endDay: range.endDay,
-          checkIn: this.convertTimeToISO(range.checkIn),
-          checkOut: this.convertTimeToISO(range.checkOut),
-          isNightShift: !!range.isNightShift,
-        })) || [],
+        ...(isSuperAdmin ? {} : { companyId: user.companyId }), // Solo si NO es superadmin
+        scheduleRanges:
+          scheduleData.scheduleRanges?.map((range) => ({
+            startDay: range.startDay,
+            endDay: range.endDay,
+            checkIn: this.convertTimeToISO(range.checkIn),
+            checkOut: this.convertTimeToISO(range.checkOut),
+            isNightShift: !!range.isNightShift,
+          })) || [],
       };
-  
-      const newSchedule = await this.scheduleRepository.createSchedule(scheduleToCreate);
-  
+
+      const newSchedule = await this.scheduleRepository.createSchedule(
+        scheduleToCreate
+      );
+
       if (!newSchedule) {
         throw new AppError("Error al crear el horario.", 500);
       }
-  
+
       return newSchedule;
     } catch (error: any) {
       throw new AppError(`Error al crear el horario: ${error.message}`, 500);
     }
   }
-  
+
   // Actualizar un horario existente
   async updateSchedule(
     id: string,
@@ -161,10 +185,10 @@ export class ScheduleService {
     if (!existingSchedule) {
       throw new AppError("Horario no encontrado", 404);
     }
-  
+
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     let companyId: string | undefined = undefined;
-  
+
     if (isSuperAdmin) {
       companyId = scheduleData.companyId;
     } else {
@@ -173,20 +197,37 @@ export class ScheduleService {
       }
       companyId = user.companyId;
     }
-  
+
     // 👉 Validaciones sólo si NO es SuperAdmin
     if (!isSuperAdmin) {
       await Promise.all([
         this.scheduleValidator.validateCompanyExists(user, companyId),
-        this.scheduleValidator.validateWorkplaceExists(user, scheduleData.workplaceId ?? undefined),
-        this.scheduleValidator.validatePositionExists(user, scheduleData.positionId ?? undefined),
+        this.scheduleValidator.validateWorkplaceExists(
+          user,
+          scheduleData.workplaceId ?? undefined
+        ),
+        this.scheduleValidator.validatePositionExists(
+          user,
+          scheduleData.positionId ?? undefined
+        ),
         this.scheduleValidator.validateCompanyActive(user, companyId),
-        this.scheduleValidator.validateWorkplaceActive(user, scheduleData.workplaceId ?? undefined),
-        this.scheduleValidator.validatePositionActive(user, scheduleData.positionId ?? undefined),
-        this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(user, scheduleData.workplaceId ?? undefined, scheduleData.positionId, companyId),
+        this.scheduleValidator.validateWorkplaceActive(
+          user,
+          scheduleData.workplaceId ?? undefined
+        ),
+        this.scheduleValidator.validatePositionActive(
+          user,
+          scheduleData.positionId ?? undefined
+        ),
+        this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(
+          user,
+          scheduleData.workplaceId ?? undefined,
+          scheduleData.positionId,
+          companyId
+        ),
       ]);
     }
-  
+
     const updatedSchedule = await this.scheduleRepository.updateSchedule(
       id,
       {
@@ -196,31 +237,36 @@ export class ScheduleService {
       },
       companyId
     );
-  
+
     if (!updatedSchedule.id) {
       throw new AppError("Error al actualizar el horario", 500);
     }
-  
+
     // Eliminar rangos antiguos
-    await this.scheduleRangeRepository.deleteScheduleRangesByScheduleId(updatedSchedule.id);
-  
+    await this.scheduleRangeRepository.deleteScheduleRangesByScheduleId(
+      updatedSchedule.id
+    );
+
     // Procesar nuevos rangos
     if (scheduleData.scheduleRanges?.length) {
       try {
         const uniqueRanges = new Set();
         const rangesToCreate = [];
-  
+
         for (const range of scheduleData.scheduleRanges) {
           if (!range.checkIn || !range.checkOut) {
             throw new Error("Los campos checkIn y checkOut son obligatorios");
           }
-  
-          if (typeof range.checkIn !== "string" || typeof range.checkOut !== "string") {
+
+          if (
+            typeof range.checkIn !== "string" ||
+            typeof range.checkOut !== "string"
+          ) {
             throw new Error("Los campos checkIn y checkOut deben ser cadenas");
           }
-  
+
           const uniqueKey = `${range.startDay}_${range.endDay}_${range.checkIn}_${range.checkOut}`;
-  
+
           if (!uniqueRanges.has(uniqueKey)) {
             uniqueRanges.add(uniqueKey);
             rangesToCreate.push({
@@ -233,16 +279,21 @@ export class ScheduleService {
             });
           }
         }
-  
-        await this.scheduleRangeRepository.bulkCreateScheduleRanges(rangesToCreate);
+
+        await this.scheduleRangeRepository.bulkCreateScheduleRanges(
+          rangesToCreate
+        );
       } catch (error: any) {
-        throw new AppError(`Error al crear los rangos de horario: ${error.message}`, 500);
+        throw new AppError(
+          `Error al crear los rangos de horario: ${error.message}`,
+          500
+        );
       }
     }
-  
+
     return updatedSchedule;
   }
-  
+
   async deleteSchedule(
     id: string,
     user: { roleId: string; companyId?: string }
@@ -269,13 +320,13 @@ export class ScheduleService {
     workplaceId: string,
     positionId: string,
     user: { roleId: string; companyId?: string },
-    companyId?: string,
+    companyId?: string
   ): Promise<ScheduleResponse | null> {
     // 1. Verificar permisos
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const targetCompanyId = isSuperAdmin ? companyId : user.companyId;
-    
-    if(!isSuperAdmin && !targetCompanyId) {
+
+    if (!isSuperAdmin && !targetCompanyId) {
       throw new AppError("No tienes una empresa asignada", 401);
     }
 

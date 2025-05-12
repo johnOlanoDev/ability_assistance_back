@@ -16,22 +16,10 @@ export class AttendanceController {
     next: NextFunction
   ) => {
     try {
-      const { skip, cursorId } = req.query;
-      const user = req.user as {
-        userId: string;
-        roleId: string;
-        companyId?: string;
-      };
-
-      // Validar 'skip'
-      const parsedSkip = parseInt(skip as string, 10);
+      const user = req.user; 
 
       // Obtener el historial de asistencia
-      const data = await this.attendanceService.getAttendanceHistory(
-        parsedSkip,
-        user,
-        cursorId as string
-      );
+      const data = await this.attendanceService.getAttendanceHistory(user);
 
       sendResponseSuccess(
         res,

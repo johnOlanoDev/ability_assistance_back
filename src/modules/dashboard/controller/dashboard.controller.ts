@@ -2,6 +2,7 @@ import { inject, injectable } from "tsyringe";
 import { DashboardService } from "../services/dashboard.service";
 import { NextFunction, Request, Response } from "express";
 import { sendResponseSuccess } from "@/utils/helper/sendResponse.helper";
+import { CustomDateRange, DateRangeFilter } from "@/utils/helper/dateRange";
 
 @injectable()
 export class DashboardController {
@@ -26,6 +27,32 @@ export class DashboardController {
         count,
         true
       );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getAttendanceMetricsByDepartment = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const { workplaceName, positionName } = req.query;
+      const user = req.user;
+
+      const chartData =
+        await this.dashboardService.getAttendanceMetricsByDepartment(
+          user,
+          workplaceName as string,
+          positionName as string
+        );
+
+      res.status(200).json({
+        success: true,
+        message: "Datos de asistencia obtenidos correctamente",
+        data: chartData,
+      });
     } catch (error) {
       next(error);
     }
@@ -144,7 +171,11 @@ export class DashboardController {
     }
   };
 
-  getDashboardMetrics = async (req: Request, res: Response, next: NextFunction) => {
+  getDashboardMetrics = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       const filter =
         (req.query.filter as "today" | "week" | "month") || "today";
@@ -167,5 +198,168 @@ export class DashboardController {
     } catch (error) {
       next(error);
     }
-  }
+  };
+
+  getMonthlyAttendanceRate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = req.user;
+
+      const rate = await this.dashboardService.getMonthlyAttendanceRate(user);
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Tasa de asistencia mensual obtenida exitosamente",
+        rate,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMonthlyLateRate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = req.user;
+
+      const rate = await this.dashboardService.getMonthlyLateRate(user);
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Tasa de tardanzas mensual obtenida exitosamente",
+        rate,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMonthlyAbsenceRate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = req.user;
+
+      const rate = await this.dashboardService.getMonthlyAbsenceRate(user);
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Tasa de ausencias mensual obtenida exitosamente",
+        rate,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getMonthlyWorkedHours = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const user = req.user;
+
+      const rate = await this.dashboardService.getMonthlyWorkedHours(user);
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Tasa de horas trabajadas mensual obtenida exitosamente",
+        rate,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getLateAttendancesThisDate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { filter, startDate, endDate } = req.query as {
+        filter?: DateRangeFilter;
+        startDate?: string;
+        endDate?: string;
+      };
+
+      const user = req.user;
+
+      const filterType =
+        filter === "custom" && startDate && endDate ? "custom" : "preset";
+
+      const customRange: CustomDateRange | undefined =
+        filterType === "custom" && startDate && endDate
+          ? { startDate, endDate }
+          : undefined;
+
+      const data = await this.dashboardService.getLateAttendancesThisMonth(
+        user,
+        (filter as DateRangeFilter) || "month",
+        customRange
+      );
+
+      res.json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPermissionsAttendancesThisDate = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { filter, startDate, endDate } = req.query as {
+        filter?: DateRangeFilter;
+        startDate?: string;
+        endDate?: string;
+      };
+
+      const user = req.user;
+
+      const filterType =
+        filter === "custom" && startDate && endDate ? "custom" : "preset";
+
+      const customRange: CustomDateRange | undefined =
+        filterType === "custom" && startDate && endDate
+          ? { startDate, endDate }
+          : undefined;
+
+      const data =
+        await this.dashboardService.getPermissionsAttendancesThisMonth(
+          user,
+          (filter as DateRangeFilter) || "month",
+          customRange
+        );
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Tasa de permisos obtenida exitosamente",
+        data,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
 }
