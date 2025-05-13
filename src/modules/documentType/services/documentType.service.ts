@@ -90,7 +90,7 @@ export class DocumentTypeService {
 
     await this.validateDocumentTypeExistingInCompany(trimmedName, companyId);
 
-    await this.permissionUtils.validateCompanyExists(user, companyId);
+    await this.permissionUtils.validateCompanyExists(companyId);
 
     return this.documentTypeRepository.createDocumentType({
       ...documentTypeData,

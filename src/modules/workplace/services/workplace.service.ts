@@ -80,7 +80,7 @@ export class WorkplaceService {
 
     await this.validateNameWorkplace(workPlaceData.name, companyId);
 
-    await this.permissionUtils.validateCompanyExists(user, companyId);
+    await this.permissionUtils.validateCompanyExists(companyId);
 
     const newWorkPlace = await this.workPlaceRepository.createWorkPlace({
       ...workPlaceData,

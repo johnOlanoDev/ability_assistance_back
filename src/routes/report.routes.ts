@@ -8,9 +8,15 @@ import {
 import { ReportAttendanceController } from "@/modules/attendance/controller/report.controller";
 
 const router = express.Router();
-const reportController = DependencyContainer.resolve(ReportAttendanceController);
+const reportController = DependencyContainer.resolve(
+  ReportAttendanceController
+);
 
-const { exportToExcel ,getAttendanceReports } = reportController;
+const {
+  exportToExcel,
+  getAttendanceReports,
+  getReportAttendanceByAssistanceType,
+} = reportController;
 
 const requiredPermissions = (permissions: string[]) =>
   validateCompanyPermission(permissions);
@@ -31,4 +37,10 @@ router.get(
   exportToExcel
 );
 
+router.get(
+  "/attendance/assistance-type",
+  authenticate,
+  requiredPermissions(["attendance:manage"]),
+  getReportAttendanceByAssistanceType
+);
 export default router;

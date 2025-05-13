@@ -5,7 +5,7 @@ import { Buffer } from "buffer";
 import { ReportAttendanceResponse } from "../types/attendance.types";
 import { IReportAttendanceRepository } from "../port/report.port";
 import { PRISMA_TOKEN, PrismaType } from "@/prisma";
-
+import { AsistentType } from "@prisma/client";
 
 const safeToISOString = (value: any): string | null => {
   if (!value) return null; // ✅ Si el valor es null, devolver null en lugar de la fecha actual
@@ -120,7 +120,7 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
       deletedAt: null,
       status: true,
     };
-  
+
     if (filters) {
       if (filters.startDate && filters.endDate) {
         where.date = {
@@ -129,7 +129,7 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
         };
       }
     }
-  
+
     const results = await this.prisma.reportAttendance.findMany({
       where,
       include: {
@@ -139,41 +139,45 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
         typePermission: true,
       },
     });
-  
+
     return results.map(transformAttendanceResponse);
   }
 
   async exportToExcel(companyId?: string, filters?: any): Promise<Buffer> {
     // Obtener todos los reportes de asistencia para la compañía
     const allReports = await this.getAllUsersWithAttendance(companyId);
-  
+
     // Filtrar los reportes según los filtros proporcionados
     const filteredReports = allReports.filter((report) => {
       // Verificar si report.date existe
       const reportDate = report.date ? new Date(report.date) : null;
-  
+
       // Filtrar por rango de fechas
       if (filters.startDate && filters.endDate && reportDate) {
-        const startDate = new Date(new Date(filters.startDate).setHours(0, 0, 0, 0));
-        const endDate = new Date(new Date(filters.endDate).setHours(23, 59, 59, 999));
-  
+        const startDate = new Date(
+          new Date(filters.startDate).setHours(0, 0, 0, 0)
+        );
+        const endDate = new Date(
+          new Date(filters.endDate).setHours(23, 59, 59, 999)
+        );
+
         if (!(reportDate >= startDate && reportDate <= endDate)) {
           return false;
         }
       }
-  
+
       // Verificar si report.user existe
       if (!report.user) {
         return false;
       }
-  
+
       return true;
     });
-  
+
     // Crear un nuevo libro de Excel
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Reporte de Asistencia");
-  
+
     // Definir encabezados del reporte
     worksheet.columns = [
       { header: "Fecha", key: "date", width: 15 },
@@ -188,7 +192,7 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
       { header: "Ubicación", key: "location", width: 30 },
       { header: "Notas", key: "notes", width: 25 },
     ];
-  
+
     // Estilo para la cabecera
     worksheet.getRow(1).font = { bold: true };
     worksheet.getRow(1).fill = {
@@ -197,18 +201,18 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
       fgColor: { argb: "FF4F81BD" },
     };
     worksheet.getRow(1).font = { color: { argb: "FFFFFFFF" }, bold: true };
-  
+
     // Agregar datos al reporte
     filteredReports.forEach((report) => {
       const reportDate = report.date ? new Date(report.date) : null;
       const formattedDate = reportDate
         ? format(reportDate, "dd/MM/yyyy")
         : "N/A";
-  
+
       const employeeName = report.user
         ? `${report.user.name || ""} ${report.user.lastName || ""}`
         : "Sin empleado";
-  
+
       worksheet.addRow({
         date: formattedDate,
         employee: employeeName,
@@ -227,9 +231,69 @@ export class ReportAttendanceRepository implements IReportAttendanceRepository {
         notes: report.notes || "",
       });
     });
-  
+
     // Generar el buffer del Excel
     const buffer = (await workbook.xlsx.writeBuffer()) as Buffer;
     return buffer;
+  }
+
+  async getReportAttendanceByAssistanceType(
+    dateRange: { start?: Date; end?: Date },
+    type?: string,
+    companyId?: string,
+  ) {
+    let typesToFilter;
+
+    if (type && type !== "ALL") {
+      typesToFilter = [
+      { typeAssistanceId: type }, 
+    ];
+    } else {
+      typesToFilter = [
+        { typeAssistanceId: AsistentType.PRESENT },
+        { typeAssistanceId: AsistentType.LATE },
+        { typeAssistanceId: AsistentType.ABSENT },
+        { typeAssistanceId: AsistentType.INJUSTIFIED_ABSENCE },
+      ];
+    }
+
+    const filter: any = {
+      OR: typesToFilter,
+      ...(dateRange.start &&
+        dateRange.end && {
+          date: {
+            gte: dateRange.start,
+            lte: dateRange.end,
+          },
+        }),
+      ...(companyId ? { companyId } : {}),
+    };
+
+    console.log(filter)
+
+    const attendances = await this.prisma.reportAttendance.findMany({
+      where: filter,
+      include: {
+        user: {
+          include: {
+            workplace: true,
+            position: true,
+            documentType: true,
+            role: true,
+          },
+        },
+        schedule: {
+          include: {
+            scheduleRanges: true,
+          },
+        },
+        company: true,
+      },
+      orderBy: {
+        checkIn: "asc",
+      },
+    });
+
+    return attendances;
   }
 }

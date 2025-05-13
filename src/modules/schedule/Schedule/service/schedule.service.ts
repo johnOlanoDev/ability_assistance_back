@@ -109,7 +109,7 @@ export class ScheduleService {
     user: { roleId: string; companyId?: string }
   ): Promise<ScheduleResponse> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    const companyId = isSuperAdmin ? undefined : user.companyId;
+    const companyId = isSuperAdmin ? scheduleData.companyId : user.companyId;
 
     // 👉 Validaciones sólo si NO es SuperAdmin
     if (!isSuperAdmin) {
@@ -149,8 +149,7 @@ export class ScheduleService {
     try {
       const scheduleToCreate = {
         ...scheduleData,
-        companyId: companyId, // Puede ser undefined si es superadmin
-        ...(isSuperAdmin ? {} : { companyId: user.companyId }), // Solo si NO es superadmin
+        companyId: companyId,
         scheduleRanges:
           scheduleData.scheduleRanges?.map((range) => ({
             startDay: range.startDay,

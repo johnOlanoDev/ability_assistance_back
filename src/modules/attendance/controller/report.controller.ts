@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import { sendResponseSuccess } from "@/utils/helper/sendResponse.helper";
 import { inject, injectable } from "tsyringe";
 import { ReportAttendanceService } from "../service/report.service";
+import { CustomDateRange, DateRangeFilter } from "@/utils/helper/dateRange";
 
 @injectable()
 export class ReportAttendanceController {
@@ -77,6 +78,49 @@ export class ReportAttendanceController {
 
       // Enviar el buffer como respuesta
       res.send(excelBuffer);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getReportAttendanceByAssistanceType = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { filter, startDate, endDate, type } = req.query as {
+        filter?: DateRangeFilter;
+        startDate?: string;
+        endDate?: string;
+        type?: string;
+      };
+
+      const user = req.user;
+
+      const filterType =
+        filter === "custom" && startDate && endDate ? "custom" : "preset";
+
+      const customRange: CustomDateRange | undefined =
+        filterType === "custom" && startDate && endDate
+          ? { startDate, endDate }
+          : undefined;
+
+      const data =
+        await this.reportAttendanceService.getReportAttendanceByAssistanceType(
+          user,
+          (filter as DateRangeFilter) || "month",
+          customRange,
+          type
+        );
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Reporte por tipo de asistencias obtenidas",
+        data,
+        true
+      );
     } catch (error) {
       next(error);
     }

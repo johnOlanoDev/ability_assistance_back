@@ -8,8 +8,9 @@ import { inject, injectable } from "tsyringe";
 export class PermissionUtils {
   constructor(
     @inject("RoleRepository") private roleRepository: RoleRepository,
-    @inject("CompanyRepository") private companyRepository:CompanyRepository,
-    @inject("PermissionRepository") private permissionRepository: PermissionRepository
+    @inject("CompanyRepository") private companyRepository: CompanyRepository,
+    @inject("PermissionRepository")
+    private permissionRepository: PermissionRepository
   ) {}
 
   // Verificar si el usuario es Superadmin
@@ -27,12 +28,11 @@ export class PermissionUtils {
   }
 
   // Validar la existencia de la empresa
-  public async validateCompanyExists(
-    user: { roleId: string; companyId?: string },
-    companyId: string
-  ): Promise<void> {
-    if (!companyId) throw new AppError("La empresa no existe", 400);
-    await this.companyRepository.getCompanyById(companyId);
+  public async validateCompanyExists(companyId?: string): Promise<void> {
+    if (!this.isSuperAdmin) {
+      if (!companyId) throw new AppError("La empresa no existe", 400);
+      await this.companyRepository.getCompanyById(companyId);
+    }
   }
 
   public async hasPermission(
@@ -41,18 +41,21 @@ export class PermissionUtils {
     companyId?: string | null
   ): Promise<boolean> {
     const isSuperAdmin = await this.isSuperAdmin(userRoleId);
-    
+
     // Si es Superadmin, tiene todos los permisos
     if (isSuperAdmin) return true;
 
     // Obtener los permisos del usuario dentro de su empresa
-    const userPermissions = await this.permissionRepository.getUserPermissions(userRoleId, companyId);
-    
+    const userPermissions = await this.permissionRepository.getUserPermissions(
+      userRoleId,
+      companyId
+    );
+
     // Verificar si el usuario tiene el permiso requerido
     if (!userPermissions.includes(requiredPermission)) {
       throw new AppError("No tienes permiso para realizar esta acción", 403);
     }
-  
+
     return true;
   }
 
@@ -87,7 +90,7 @@ export class PermissionUtils {
   }
 
   // Verificar si el usuario puede actualizar una empresa
-  public async  canUpdateCompany(
+  public async canUpdateCompany(
     roleId: string,
     userCompanyId: string | undefined,
     targetCompanyId: string

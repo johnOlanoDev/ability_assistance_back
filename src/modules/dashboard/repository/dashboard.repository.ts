@@ -581,4 +581,6 @@ export class DashboardRepository {
 
     return attendances;
   }
+
+  
 }
