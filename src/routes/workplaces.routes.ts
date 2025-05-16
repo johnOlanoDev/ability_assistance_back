@@ -27,7 +27,7 @@ const requiredPermissions = (permissions: string[]) =>
 router.get(
   "/all",
   authenticate,
-  requiredPermissions(["workplace:read"]),
+  requiredPermissions(["workplace:read", "workplace:self"]),
   validate,
   getAllWorkPlaces
 );

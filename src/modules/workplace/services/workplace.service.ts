@@ -19,25 +19,58 @@ export class WorkplaceService {
   // Obtener todas las áreas de trabajo con caché
   async getAllWorkPlaces(
     take: number,
-    user: { roleId: string; companyId?: string },
+    user: { userId: string; roleId: string; companyId?: string },
     cursorId?: string
   ): Promise<{ workPlaces: WorkPlacesResponse[]; total: number }> {
+    // 1. Determinar el rol del usuario
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+    const isRegularUser = !isSuperAdmin && !isAdmin;
 
-    let result;
-    if (isSuperAdmin) {
-      result = await this.workPlaceRepository.getAllWorkPlaces(take, cursorId);
-    } else if (user.companyId) {
-      result = await this.workPlaceRepository.getAllWorkPlaces(
-        take,
-        cursorId,
-        user.companyId
+    try {
+      // 2. Según el rol, determinar cómo filtrar
+      if (isSuperAdmin) {
+        // Superadmin: ve todas las áreas
+        return await this.workPlaceRepository.getAllWorkPlaces(take, cursorId);
+      } else if (isAdmin && user.companyId) {
+        // Admin: ve todas las áreas de su compañía
+        return await this.workPlaceRepository.getAllWorkPlaces(
+          take,
+          cursorId,
+          user.companyId
+        );
+      } else if (isRegularUser) {
+        // Usuario regular: solo ve su área
+
+        // Primero obtenemos el área del usuario
+        const userData = await this.workPlaceRepository.getWorkplaceByUser(
+          user.userId
+        );
+
+        if (!userData?.workplaceId) {
+          return { workPlaces: [], total: 0 }; // Usuario no tiene área asignada
+        }
+
+        // Obtenemos solo el área específica del usuario
+        const userWorkplace = await this.workPlaceRepository.getWorkPlaceById(
+          userData.workplaceId,
+          user.companyId
+        );
+
+        return {
+          workPlaces: userWorkplace ? [userWorkplace] : [],
+          total: userWorkplace ? 1 : 0,
+        };
+      } else {
+        throw new AppError("No tienes permisos para realizar esta acción", 403);
+      }
+    } catch (error: any) {
+      throw new AppError(
+        error.message || "Error al obtener las áreas de trabajo",
+        error.statusCode || 500,
+        error
       );
-    } else {
-      throw new AppError("No tienes acceso", 401);
     }
-
-    return result;
   }
 
   // Obtener un área de trabajo por ID con caché

@@ -24,13 +24,54 @@ export class PositionService {
   // Obtener todas las posiciones
   async getAllPositions(
     take: number,
-    user: { roleId: string; companyId?: string },
+    user: { userId?: string; roleId: string; companyId?: string },
     cursorId?: string
   ): Promise<{ positions: PositionResponse[]; total: number }> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    const companyId = isSuperAdmin ? undefined : user.companyId;
 
-    return this.positionRepository.getAllPositions(take, cursorId, companyId);
+    const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+
+    const isRegularUser = !isSuperAdmin && !isAdmin;
+
+    try {
+      if (isSuperAdmin) {
+        return await this.positionRepository.getAllPositions(take, cursorId);
+      } else if (isAdmin && user.companyId) {
+        return await this.positionRepository.getAllPositions(
+          take,
+          cursorId,
+          user.companyId
+        );
+      } else if (isRegularUser) {
+        const userData = await this.positionRepository.getPositionByUser(
+          user.userId
+        );
+
+        if (!userData?.positionId) {
+          return { positions: [], total: 0 };
+        }
+
+        const userPosition = await this.positionRepository.getPositionById(
+          userData.positionId,
+          user.companyId
+        );
+
+        return {
+          positions: userPosition ? [userPosition] : [],
+          total: userPosition ? 1 : 0,
+        };
+      } else {
+        throw new AppError(
+          "No tienes permisos para acceder a esta información"
+        );
+      }
+    } catch (error: any) {
+      throw new AppError(
+        error.message || "Error al obtener las áreas de trabajo",
+        error.statusCode || 500,
+        error
+      );
+    }
   }
 
   async getAllPositionsDeleted(
@@ -63,6 +104,28 @@ export class PositionService {
     if (!position) throw new AppError("El cargo no existe", 404);
 
     return position;
+  }
+
+  async getPositionsByWorkplace(
+    workplaceId: string,
+    user: { userId: string; roleId: string; companyId?: string }
+  ) {
+    try {
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      if (isSuperAdmin) {
+        return this.positionRepository.getPositionsByWorkplace(workplaceId);
+      } else if (user.companyId) {
+        return this.positionRepository.getPositionsByWorkplace(
+          workplaceId,
+          user.companyId
+        );
+      } else {
+        throw new AppError("No tienes permisos para realizar esta acción", 403);
+      }
+    } catch (error: any) {
+      throw new AppError(error.message);
+    }
   }
 
   // Crear una nueva posición

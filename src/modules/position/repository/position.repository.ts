@@ -92,6 +92,24 @@ export class PositionRepository implements IPositionRepository {
     });
   }
 
+  async getPositionsByWorkplace(workplaceId: string, companyId?: string) {
+    return this.prisma.position.findMany({
+      where: {
+        workplaceId,
+        ...(companyId ? { companyId } : {}),
+        status: true,
+      },
+      include: { company: true },
+    });
+  }
+
+  async getPositionByUser(userId?: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { positionId: true },
+    });
+  }
+
   // Crear una nueva posición
   async createPosition(data: CreatePositionDTO): Promise<PositionResponse> {
     return this.prisma.position.create({

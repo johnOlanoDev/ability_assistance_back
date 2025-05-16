@@ -157,17 +157,17 @@ export class ScheduleRepository implements IScheduleRepository {
     companyId?: string
   ): Promise<ScheduleResponse> {
     const { scheduleRanges, ...scheduleData } = data;
-
+  
     const schedule = await this.prisma.schedule.update({
-      where: { id, companyId: companyId || undefined, deletedAt: null },
+      where: { id }, // ✅ Ahora busca solo por ID
       data: {
         ...scheduleData,
+        ...(companyId !== undefined && { companyId }), // Actualiza companyId si viene
         updatedAt: new Date(),
         ...(scheduleRanges && {
           scheduleRanges: {
-            deleteMany: {},
+            deleteMany: { scheduleId: id }, // Elimina rangos antiguos del horario
             create: transformCreateScheduleRanges(scheduleRanges),
-            update: transformCreateScheduleRanges(scheduleRanges),
           },
         }),
       },
@@ -177,6 +177,7 @@ export class ScheduleRepository implements IScheduleRepository {
         scheduleExceptions: true,
       },
     });
+  
     return transformScheduleRanges(schedule);
   }
 

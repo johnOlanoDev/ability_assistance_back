@@ -15,7 +15,7 @@ export class PositionController {
       const { take = 10, cursorId } = req.query;
       const user = req.user;
 
-      console.log(user)
+      console.log(user);
 
       const positions = await this.positionService.getAllPositions(
         parseInt(take as string, 10),
@@ -36,7 +36,11 @@ export class PositionController {
   };
 
   // Obtener todas las posiciones eliminadas
-  getAllPositionsDeleted = async (req: Request, res: Response, next: NextFunction) => {
+  getAllPositionsDeleted = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       const { take = 10, cursorId } = req.query;
       const user = req.user;
@@ -54,6 +58,26 @@ export class PositionController {
         positions,
         true
       );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getPositionsByWorkplace = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      const positions = await this.positionService.getPositionsByWorkplace(
+        id,
+        user
+      );
+
+      sendResponseSuccess(res, 200, "Cargos obtenidos", positions, true);
     } catch (error) {
       next(error);
     }

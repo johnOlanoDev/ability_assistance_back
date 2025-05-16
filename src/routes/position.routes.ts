@@ -22,6 +22,7 @@ const {
   createPosition,
   updatePosition,
   deletePosition,
+  getPositionsByWorkplace,
 } = positionController;
 
 const requiredPermissions = (permissions: string[]) =>
@@ -30,7 +31,7 @@ const requiredPermissions = (permissions: string[]) =>
 router.get(
   "/all",
   authenticate,
-  requiredPermissions(["position:read"]),
+  requiredPermissions(["position:read", "position:self"]),
   paginationValidation,
   validate,
   getAllPositions
@@ -50,6 +51,14 @@ router.get(
   idParamValidation,
   validate,
   getPositionById
+);
+router.get(
+  "/workplace/:id",
+  authenticate,
+  requiredPermissions(["position:read", "position:self"]),
+  idParamValidation,
+  validate,
+  getPositionsByWorkplace
 );
 router.post(
   "/save",

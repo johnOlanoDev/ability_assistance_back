@@ -43,6 +43,14 @@ export class WorkplaceRepository implements IWorkPlaceRepository {
     });
   }
 
+  async getWorkplaceByUser(userId: string) {
+    const userData = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { workplaceId: true },
+    });
+    return userData;
+  }
+
   // Crear una nueva área de trabajo
   async createWorkPlace(
     data: CreateWorkPlacesDTO
@@ -64,7 +72,7 @@ export class WorkplaceRepository implements IWorkPlaceRepository {
   ): Promise<WorkPlacesResponse> {
     return this.prisma.workplace.update({
       where: { id, companyId: companyId || undefined },
-      data: { ...data, updatedAt: new Date()   },
+      data: { ...data, updatedAt: new Date() },
     });
   }
 
@@ -102,7 +110,10 @@ export class WorkplaceRepository implements IWorkPlaceRepository {
     });
   }
 
-  async findWorkplaceById(id: string, user: { roleId: string; companyId?: string }): Promise<WorkPlacesResponse | null> {
+  async findWorkplaceById(
+    id: string,
+    user: { roleId: string; companyId?: string }
+  ): Promise<WorkPlacesResponse | null> {
     const workplace = await this.prisma.workplace.findUnique({
       where: { id, deletedAt: null },
     });

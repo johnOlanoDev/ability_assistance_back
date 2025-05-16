@@ -26,7 +26,8 @@ export class DashboardRepository {
   async getAttendanceMetricsByDepartment(
     workplaceName?: string,
     positionName?: string,
-    companyId?: string
+    companyId?: string,
+    userId?: string
   ) {
     const result: any = [];
 
@@ -43,7 +44,11 @@ export class DashboardRepository {
             status: true,
             ...(positionName ? { name: positionName } : {}),
           },
-          include: { users: true },
+          include: {
+            users: {
+              ...(userId ? { where: { id: userId } } : {}),
+            },
+          },
         },
       },
     });
@@ -581,6 +586,4 @@ export class DashboardRepository {
 
     return attendances;
   }
-
-  
 }

@@ -323,43 +323,43 @@ export class ScheduleValidator {
     workplaceId?: string,
     positionId?: string
   ) {
-    
     if (!workplaceId) {
       throw new AppError("El id del área de trabajo es requerido", 400);
     }
-
+  
     if (!positionId) {
       throw new AppError("El id de la posición es requerido", 400);
     }
-
+  
     if (!user.companyId) {
       throw new AppError("No tienes permiso para ver horarios", 403);
     }
-
+  
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    
+  
     const workplaceFind = await this.workplaceRepository.findWorkplaceById(
       workplaceId,
       user
     );
-
+  
     if (isSuperAdmin) return;
-
-
-    if (workplaceFind?.id !== workplaceId) throw new AppError("No tienes permiso para ver este horario", 403);
-    
-    if (user.companyId === workplaceId) {
-      const schedule =
-        await this.scheduleRepository.findScheduleByWorkplaceAndPosition(
-          workplaceId,
-          positionId,
-          user
-        );
-      if (!schedule) {
-        throw new AppError("El horario no existe", 404);
-      }
+  
+    if (workplaceFind?.id !== workplaceId) {
+      throw new AppError("No tienes permiso para ver este horario", 403);
+    }
+  
+    const schedule = await this.scheduleRepository.findScheduleByWorkplaceAndPosition(
+      workplaceId,
+      positionId,
+      user
+    );
+  
+    if (schedule) {
+      // ⛔ Ya existe, no permitir crear uno nuevo
+      throw new AppError("Ya existe un horario para esta combinación de área y posición.", 400);
     }
   }
+
 
   async formatHour(time: string): Promise<Date> {
     if (!time || typeof time !== "string") {

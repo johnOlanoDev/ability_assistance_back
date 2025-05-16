@@ -344,6 +344,8 @@ export class InitializationService {
       const specificUserPermissions = [
         "user:profile",
         "company:self",
+        "workplace:self",
+        "position:self",
         "menu:self",
         "role:self",
         "schedule:self",
@@ -381,6 +383,8 @@ export class InitializationService {
           `Se asignaron ${permissionsToAssign.length} permisos al rol Usuario.`
         );
       }
+
+      console.log(userPermissions)
 
       console.log("Asignación de permisos completada.");
     } catch (error: any) {

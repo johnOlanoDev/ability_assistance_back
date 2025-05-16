@@ -32,9 +32,8 @@ export class AuthService {
     );
 
     await this.updateLastLogin(user.id);
-    
-    if (!isPasswordValid)
-      throw new AppError("Credenciales inválidas. Inténtelo nuevamente.");
+
+    if (!isPasswordValid) throw new AppError("Contraseña incorrecta.");
 
     // Obtener el rol del usuario
     const role =
@@ -88,6 +87,10 @@ export class AuthService {
   }
 
   async updateLastLogin(userId: string, companyId?: string): Promise<void> {
-    await this.userRepository.updateUser(userId, { lastLogin: new Date() }, companyId);
+    await this.userRepository.updateUser(
+      userId,
+      { lastLogin: new Date() },
+      companyId
+    );
   }
 }

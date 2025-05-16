@@ -6,10 +6,7 @@ node_modules/
 .env.production
 
 # Ignorar archivos generados por el build
-<<<<<<< HEAD
-/dist/
-=======
 /dist/
 
 app.log
->>>>>>> af697ba3b7b456711e7fbffa6f750ffd238193dd
+

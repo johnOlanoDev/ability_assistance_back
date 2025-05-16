@@ -25,13 +25,15 @@ export class DashboardService {
   }
 
   async getAttendanceMetricsByDepartment(
-    user: { roleId: string; companyId?: string },
+    user: { userId: string; roleId: string; companyId?: string },
     workplaceName?: string,
     positionName?: string
   ) {
     try {
       // 1. Determinar si es superadmin
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+      const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+      const isUser = !isSuperAdmin && !isAdmin;
 
       // 2. Si el usuario no es superadmin, validar que tenga una compañía asignada
       if (!isSuperAdmin && !user.companyId) {
@@ -44,17 +46,26 @@ export class DashboardService {
       // 3. Determinar el companyId basado en el rol (undefined para superadmin)
       const companyId = isSuperAdmin ? undefined : user.companyId;
 
+      const userId = isUser ? user.userId : undefined;
+
       if (isSuperAdmin) {
         return this.dashboardRepository.getAttendanceMetricsByDepartment(
           workplaceName,
           positionName
+        );
+      } else if (isAdmin) {
+        return this.dashboardRepository.getAttendanceMetricsByDepartment(
+          workplaceName,
+          positionName,
+          companyId
         );
       }
 
       return this.dashboardRepository.getAttendanceMetricsByDepartment(
         workplaceName,
         positionName,
-        companyId
+        companyId,
+        userId
       );
     } catch (error: any) {
       throw new AppError(

@@ -12,6 +12,7 @@ import { ScheduleRangeRepository } from "../../scheduleRange/repository/schedule
 import { ScheduleValidator } from "../validator/schedule.validator";
 import { transformScheduleRanges } from "../repository/schedule.repository";
 import { UserRepository } from "@/modules/users/repository/user.repository";
+import { Prisma } from "@prisma/client";
 
 @injectable()
 export class ScheduleService {
@@ -170,6 +171,15 @@ export class ScheduleService {
 
       return newSchedule;
     } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") {
+          // Es un error por clave única duplicada
+          throw new AppError(
+            "Ya existe un horario registrado para esta combinación de área de trabajo y posición.",
+            400
+          );
+        }
+      }
       throw new AppError(`Error al crear el horario: ${error.message}`, 500);
     }
   }
@@ -195,6 +205,17 @@ export class ScheduleService {
         throw new AppError("No tienes una empresa asignada", 401);
       }
       companyId = user.companyId;
+    }
+
+    // 🚫 Validar si ya tiene una empresa asignada diferente
+    if (
+      existingSchedule.companyId &&
+      existingSchedule.companyId !== companyId
+    ) {
+      throw new AppError(
+        `El horario ya pertenece a la empresa con ID "${existingSchedule.companyId}" y no puede ser reasignado.`,
+        400
+      );
     }
 
     // 👉 Validaciones sólo si NO es SuperAdmin
