@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native"]
 }
 
@@ -79,7 +79,6 @@ model Schedule {
   deletedAt        DateTime?
   ReportAttendance ReportAttendance[]
 
-  @@unique([workplaceId, positionId])
   @@index([companyId])
 }
 
@@ -383,7 +382,7 @@ model RolePermission {
 model ReportAttendance {
   id                String          @id @default(uuid()) @db.Char(36)
   scheduleId        String
-  schedule          Schedule        @relation(fields: [scheduleId], references: [id])
+  schedule          Schedule        @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   date              DateTime        @db.Date
   checkIn           DateTime        @db.Time(6)
   checkOut          DateTime?       @db.Time(6)

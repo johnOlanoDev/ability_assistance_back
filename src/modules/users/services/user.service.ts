@@ -32,17 +32,17 @@ export class UserService {
   ) {}
 
   // Obtener todos los usuarios
-  async getAllUsers(user: { roleId: string; companyId?: string }) {
+  async getAllUsers(user: { userId: string, roleId: string; companyId?: string }) {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+    const isUser = !isSuperAdmin && !isAdmin
 
     if (isSuperAdmin) {
       return this.userRepository.getAllUsers();
-    } else {
-      if (!user.companyId) {
-        throw new AppError("No tienes una empresa asignada", 403);
-      }
-
+    } else if(isAdmin) {
       return this.userRepository.getAllUsers(user.companyId);
+    } else {
+      return this.userRepository.getAllUsers(user.companyId, user.userId)
     }
   }
 

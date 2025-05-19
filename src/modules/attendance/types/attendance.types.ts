@@ -58,7 +58,7 @@ export interface AttendanceHistory {
   updatedAt: string;
   company?: CompanyResponse | null;
   user: any;
-  schedule: ScheduleResponse;
+  schedule?: ScheduleResponse | null;
 }
 
 export interface CreateReportAttendance {

@@ -15,6 +15,7 @@ const router = express.Router();
 const scheduleController = DependencyContainer.resolve(ScheduleController);
 const {
   getAllSchedules,
+  getAllSchedulesWithDisabled,
   getAllScheduleById,
   createSchedule,
   updateSchedule,
@@ -31,6 +32,14 @@ router.get(
   requirePermission(["schedule:read", "schedule:self"]),
   validate,
   getAllSchedules
+);
+
+router.get(
+  "/disable/all",
+  authenticate,
+  requirePermission(["schedule:read", "schedule:self"]),
+  validate,
+  getAllSchedulesWithDisabled
 );
 
 router.get(

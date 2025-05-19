@@ -9,6 +9,7 @@ import {
 import { toZonedTime } from "date-fns-tz";
 import { DayOfWeek } from "../../scheduleRange/types/scheduleRange.types";
 import { PRISMA_TOKEN, PrismaType } from "@/prisma";
+import { AppError } from "@/middleware/errors/AppError";
 
 export const transformScheduleRanges = (schedule: any) => {
   if (!schedule) return null;
@@ -35,7 +36,7 @@ const transformCreateScheduleRanges = (ranges: any[]) => {
     checkOut: range.checkOut,
     isNightShift: range.isNightShift ?? false,
   }));
-};    
+};
 
 @injectable()
 export class ScheduleRepository implements IScheduleRepository {
@@ -47,7 +48,6 @@ export class ScheduleRepository implements IScheduleRepository {
     workplaceId?: string,
     positionId?: string
   ): Promise<{ schedules: ScheduleResponse[]; total: number }> {
-
     const timeZone = "America/Bogota";
     const now = new Date();
     const localteCreatedAt = toZonedTime(now, timeZone);
@@ -90,6 +90,52 @@ export class ScheduleRepository implements IScheduleRepository {
     };
   }
 
+  async getAllSchedulesWithDisabled(
+    companyId?: string,
+    workplaceId?: string,
+    positionId?: string
+  ): Promise<{
+    schedules: ScheduleResponse[];
+    total: number;
+  }> {
+    const timeZone = "America/Bogota";
+    const now = new Date();
+    const localteCreatedAt = toZonedTime(now, timeZone);
+
+    const schedules = await this.prisma.schedule.findMany({
+      where: {
+        companyId,
+        workplaceId,
+        positionId,
+        NOT: { deletedAt: null },
+      },
+      include: {
+        scheduleRanges: { include: { schedule: false } },
+        scheduleChanges: true,
+        scheduleExceptions: true,
+        company: true,
+        workplace: true,
+        position: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const total = await this.prisma.schedule.count({
+      where: {
+        companyId,
+        workplaceId,
+        positionId,
+        NOT: { deletedAt: null },
+        createdAt: localteCreatedAt,
+      },
+    });
+
+    return {
+      schedules: schedules.map(transformScheduleRanges),
+      total,
+    };
+  }
+
   async getScheduleById(
     id: string,
     companyId?: string
@@ -113,6 +159,21 @@ export class ScheduleRepository implements IScheduleRepository {
     const timeZone = "America/Bogota";
     const now = new Date();
     const localteCreatedAt = toZonedTime(now, timeZone);
+
+    const existing = await this.prisma.schedule.findFirst({
+      where: {
+        workplaceId: data.workplaceId,
+        positionId: data.positionId,
+        deletedAt: null,
+        status: true,
+      },
+    });
+
+    if (existing) {
+      throw new AppError(
+        "Ya existe un horario activo para ese cargo en esta área."
+      );
+    }
 
     const schedule = await this.prisma.schedule.create({
       data: {
@@ -157,7 +218,7 @@ export class ScheduleRepository implements IScheduleRepository {
     companyId?: string
   ): Promise<ScheduleResponse> {
     const { scheduleRanges, ...scheduleData } = data;
-  
+
     const schedule = await this.prisma.schedule.update({
       where: { id }, // ✅ Ahora busca solo por ID
       data: {
@@ -177,7 +238,7 @@ export class ScheduleRepository implements IScheduleRepository {
         scheduleExceptions: true,
       },
     });
-  
+
     return transformScheduleRanges(schedule);
   }
 
@@ -185,9 +246,30 @@ export class ScheduleRepository implements IScheduleRepository {
     id: string,
     companyId?: string
   ): Promise<ScheduleResponse> {
-    const schedule = await this.prisma.schedule.delete({
-      where: { id, companyId: companyId || undefined, deletedAt: null },
+    const deletedAt = new Date();
+
+    // Marca el horario como eliminado
+    const schedule = await this.prisma.schedule.update({
+      where: { id, companyId: companyId || undefined },
+      data: { deletedAt, status: false },
     });
+
+    // Marca sus relaciones como eliminadas
+    await this.prisma.scheduleRange.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt },
+    });
+
+    await this.prisma.scheduleChange.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt },
+    });
+
+    await this.prisma.scheduleException.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt },
+    });
+
     return transformScheduleRanges(schedule);
   }
 
@@ -304,7 +386,7 @@ export class ScheduleRepository implements IScheduleRepository {
   async findActiveSchedule(
     workplaceId: string,
     positionId: string,
-    companyId: string
+    companyId: string,
   ) {
     return this.prisma.schedule.findFirst({
       where: {

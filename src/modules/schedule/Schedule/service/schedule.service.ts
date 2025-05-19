@@ -65,6 +65,44 @@ export class ScheduleService {
     return data;
   };
 
+  getAllSchedulesWithDisabled = async (user: {
+    roleId: string;
+    companyId?: string;
+    userId: string;
+  }) => {
+    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+
+    let companyId, workplaceId, positionId;
+
+    if (isSuperAdmin) {
+      // Superadmin ve todos los horarios
+      companyId = undefined;
+      workplaceId = undefined;
+      positionId = undefined;
+    } else if (isAdmin) {
+      // Administrador ve todos los horarios de su empresa
+      companyId = user.companyId;
+      workplaceId = undefined; // No filtrar por área
+      positionId = undefined; // No filtrar por cargo
+    } else {
+      // Usuario normal ve solo sus horarios
+      const userData = await this.userRepository.getUserAreaAndPosition(
+        user.userId
+      );
+      companyId = user.companyId;
+      workplaceId = userData.workplaceId;
+      positionId = userData.positionId;
+    }
+
+    const data = await this.scheduleRepository.getAllSchedulesWithDisabled(
+      companyId,
+      workplaceId || undefined,
+      positionId || undefined
+    );
+    return data;
+  };
+
   getScheduleById = async (
     id: string,
     user: { roleId: string; companyId?: string }

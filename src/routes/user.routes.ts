@@ -35,7 +35,7 @@ const {
 router.get(
   "/all",
   authenticate,
-  requirePermission(["user:read"]),
+  requirePermission(["user:read", "user:self"]),
   paginationValidation,
   validate,
   getAllUsers

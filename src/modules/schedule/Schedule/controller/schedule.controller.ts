@@ -27,6 +27,24 @@ export class ScheduleController {
     }
   };
 
+  getAllSchedulesWithDisabled = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const user = req.user;
+
+      const schedules = await this.scheduleService.getAllSchedulesWithDisabled(user);
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Horarios desactivados obtenidos correctamente",
+        schedules,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getAllScheduleById = async (
     req: Request,
     res: Response,

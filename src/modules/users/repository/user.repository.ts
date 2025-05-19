@@ -12,10 +12,11 @@ export class UserRepository {
   constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
 
   // Obtener todos los usuarios (con filtro opcional por companyId)
-  async getAllUsers(companyId?: string) {
+  async getAllUsers(companyId?: string, userId?: string) {
     return await this.prisma.user.findMany({
       where: {
         companyId: companyId || undefined, // Solo filtra por companyId si es proporcionado
+        status: true
       },
       include: {
         role: true,

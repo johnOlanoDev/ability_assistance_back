@@ -2,7 +2,6 @@ import { inject, injectable } from "tsyringe";
 import {
   ReportAttendanceResponse,
   CreateReportAttendance,
-  AttendanceHistory,
   UpdateReportAttendance,
   AsistentType,
 } from "../types/attendance.types";
@@ -13,12 +12,14 @@ import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { AppError } from "@/middleware/errors/AppError";
 import { AttendanceRepository } from "../repository/attendance.repository";
 import {
+  getDistance,
   getReadableAddress,
   validateCoordinates,
 } from "@/utils/helper/coordinate";
 import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
 import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
 import { Decimal, PrismaClientKnownRequestError } from "@/prisma";
+import { REFERENCE_LOCATION } from "@/config/location";
 
 @injectable()
 export class AttendanceService {
@@ -164,10 +165,6 @@ export class AttendanceService {
           return false;
         }
       }
-      /* 
-      if (!record.checkIn || !record.checkOut) {
-        return false;
-      } */
       return true;
     });
 
@@ -218,7 +215,28 @@ export class AttendanceService {
       if (data.locationLatitude && data.locationLongitude) {
         const latitude = parseFloat(data.locationLatitude.toString());
         const longitude = parseFloat(data.locationLongitude.toString());
+
         validateCoordinates(latitude, longitude);
+
+        // Calcular distancia desde la ubicación de referencia
+        /* const distance = getDistance(
+          REFERENCE_LOCATION.latitude,
+          REFERENCE_LOCATION.longitude,
+          latitude,
+          longitude
+        );
+
+        const MAX_DISTANCE_ALLOWED_KM = 0.1; // 100 metros
+
+        if (distance > MAX_DISTANCE_ALLOWED_KM) {
+          throw new AppError(
+            `Estás a ${distance.toFixed(
+              2
+            )} km del lugar autorizado. Debes estar a menos de ${MAX_DISTANCE_ALLOWED_KM} km para registrar tu asistencia.`,
+            400
+          );
+        } */
+
         readableAddress = await getReadableAddress(latitude, longitude);
       }
 
@@ -337,7 +355,7 @@ export class AttendanceService {
       };
 
       return transformAttendanceResponse(responseData);
-    } catch (error) {
+    } catch (error: any) {
       // Verificar si el error es por violación de restricción de unicidad
       if (error instanceof PrismaClientKnownRequestError) {
         if (error.code === "P2002") {
@@ -348,9 +366,13 @@ export class AttendanceService {
           );
         }
       }
+      if (error instanceof AppError) {
+        console.warn("AppError:", error.message);
+        throw error; // Vuelve al controlador con status code correcto
+      }
       // Para otros errores, lanzar un mensaje genérico
-      console.error("Error creating report attendance:", error);
-      throw new AppError("Error interno del servidor", 500);
+      console.error("Error creating report attendance:", error.message);
+      throw new AppError(`Error interno del servidor ${error.message}`, 500);
     }
   }
 
@@ -384,10 +406,32 @@ export class AttendanceService {
       }
 
       let readableAddress: string | null = null;
+
       if (data.locationLatitude && data.locationLongitude) {
         const latitude = parseFloat(data.locationLatitude.toString());
         const longitude = parseFloat(data.locationLongitude.toString());
+
         validateCoordinates(latitude, longitude);
+
+        // Calcular distancia desde la ubicación de referencia
+        const distance = getDistance(
+          REFERENCE_LOCATION.latitude,
+          REFERENCE_LOCATION.longitude,
+          latitude,
+          longitude
+        );
+
+        const MAX_DISTANCE_ALLOWED_KM = 0.1; // 100 metros
+
+        if (distance > MAX_DISTANCE_ALLOWED_KM) {
+          throw new AppError(
+            `Estás a ${distance.toFixed(
+              2
+            )} km del lugar autorizado. Debes estar a menos de ${MAX_DISTANCE_ALLOWED_KM} km para registrar tu asistencia.`,
+            400
+          );
+        }
+
         readableAddress = await getReadableAddress(latitude, longitude);
       }
 

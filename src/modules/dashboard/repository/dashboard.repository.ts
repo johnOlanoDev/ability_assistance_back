@@ -186,18 +186,29 @@ export class DashboardRepository {
     });
   }
 
-  async getRecentAttendanceRecords(limit: number = 10, companyId?: string) {
+  async getRecentAttendanceRecords(
+    limit: number = 10,
+    companyId?: string,
+    userId?: string
+  ) {
     return this.prisma.reportAttendance.findMany({
       orderBy: {
         checkIn: "desc",
       },
       where: {
         companyId: companyId || undefined,
+        userId: userId
       },
       take: limit,
       include: {
         user: true,
-        schedule: true,
+        schedule: {
+          include: {
+            scheduleChanges: true,
+            scheduleRanges: true,
+            scheduleExceptions: true
+          }
+        },
         company: true,
         typePermission: true,
       },

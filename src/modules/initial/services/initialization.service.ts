@@ -343,6 +343,7 @@ export class InitializationService {
       // Definir los permisos exactos para el usuario
       const specificUserPermissions = [
         "user:profile",
+        "user:self",
         "company:self",
         "workplace:self",
         "position:self",

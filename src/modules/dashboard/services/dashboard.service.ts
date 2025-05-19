@@ -159,6 +159,7 @@ export class DashboardService {
   async getRecentAttendanceRecords(
     limit: number = 20,
     user: {
+      userId: string,
       roleId: string;
       companyId?: string;
     }
@@ -166,14 +167,23 @@ export class DashboardService {
     try {
       await this.validateCompany(user);
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+      const isAdmin = await this.permissionUtils.isAdmin(user.roleId)
+      const isUser = !isSuperAdmin && !isAdmin
+
 
       if (isSuperAdmin) {
         return this.dashboardRepository.getRecentAttendanceRecords();
-      } else {
+      } else if(isAdmin) {
         return this.dashboardRepository.getRecentAttendanceRecords(
           limit,
           user?.companyId
         );
+      } else {
+        return (this.dashboardRepository.getRecentAttendanceRecords(
+          limit,
+          user?.companyId,
+          user.userId
+        ))
       }
     } catch (error) {
       throw new AppError(
