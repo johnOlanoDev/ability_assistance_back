@@ -19,6 +19,7 @@ async function bootstrap() {
     "http://localhost:3001", // local
     "http://localhost:5000", // Vite
     "https://abilityapps.com.pe", // producción
+    "https://dev.abilityapps.com.pe",
   ];
   app.use(
     cors({
