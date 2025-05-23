@@ -3,7 +3,10 @@ import { ScheduleResponse } from "../../Schedule/types/schedule.types";
 import { WorkPlacesResponse } from "@/modules/workplace/types/workplace.types";
 import { PositionResponse } from "@/modules/position/types/position.types";
 import { CompanyResponse } from "@/modules/companies/types/company.types";
-import { AsistentType } from "@/modules/attendance/types/attendance.types";
+import {
+  AsistentType,
+  PermissionType,
+} from "@/modules/attendance/types/attendance.types";
 
 // Enum para los tipos de excepción
 export enum ExceptionType {
@@ -39,7 +42,6 @@ export interface ScheduleExceptionResponse {
 
   exceptionType: ExceptionType;
   assistanceType?: AsistentType;
-
 }
 
 export interface ScheduleExceptionFilters {
@@ -68,9 +70,11 @@ export type CreateScheduleExceptionDTO = {
   companyId?: string;
   exceptionType: ExceptionType;
 
-  assistanceType?: AsistentType;
+  assistanceType?: PermissionType;
 };
 
-export type UpdateScheduleExceptionDTO = Partial<Omit<CreateScheduleExceptionDTO, 'exceptionType'>> & {
+export type UpdateScheduleExceptionDTO = Partial<
+  Omit<CreateScheduleExceptionDTO, "exceptionType">
+> & {
   id: string;
 };

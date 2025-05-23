@@ -27,7 +27,7 @@ export interface ReportAttendanceResponse {
   description?: string | null;
   userId: string;
   user?: UserResponse | null;
-  typeAssistanceId?: AsistentType;
+  typeAssistanceId?: AsistentType | PermissionType;
   role?: RoleResponse | null;
   status?: boolean;
   createdAt?: Date;
@@ -49,7 +49,7 @@ export interface AttendanceHistory {
   locationLatitude?: number | null;
   locationLongitude?: number | null;
   locationAddress?: string | null;
-  typeAssistanceId: AsistentType;
+  typeAssistanceId: AsistentType | PermissionType;
   status: boolean;
   createdAt: string;
   updatedAt: string;
@@ -71,7 +71,6 @@ export interface CreateReportAttendance {
   notes?: string | null;
   description?: string | null;
   userId: string;
-  typePermissionId?: string;
   typeAssistanceId: AsistentType | PermissionType;
   status?: boolean;
   companyId?: string | null;

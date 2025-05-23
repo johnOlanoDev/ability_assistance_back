@@ -12,12 +12,9 @@ import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { AppError } from "@/middleware/errors/AppError";
 import { AttendanceRepository } from "../repository/attendance.repository";
 import {
-  getDistance,
   getReadableAddress,
   validateCoordinates,
 } from "@/utils/helper/coordinate";
-import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
-import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
 import { Decimal, PrismaClientKnownRequestError } from "@/prisma";
 import { startOfDay } from "date-fns";
 
@@ -26,8 +23,6 @@ export class AttendanceService {
   constructor(
     @inject("AttendanceRepository")
     private attendanceRepository: AttendanceRepository,
-    @inject("PermissionTypeRepository")
-    private permissionTypeRepository: PermissionTypeRepository,
     @inject(UserService) private userService: UserService,
     @inject(CompanyService) private companyService: CompanyService,
     @inject(ScheduleService) private scheduleService: ScheduleService,

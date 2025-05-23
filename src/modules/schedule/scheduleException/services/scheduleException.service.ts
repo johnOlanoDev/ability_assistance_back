@@ -15,10 +15,9 @@ import { UserRepository } from "@/modules/users/repository/user.repository";
 import { WorkplaceRepository } from "@/modules/workplace/repository/workplace.repository";
 import { PositionRepository } from "@/modules/position/repository/position.repository";
 import { AttendanceRepository } from "@/modules/attendance/repository/attendance.repository";
-import { AsistentType } from "@prisma/client";
 import { startOfDay } from "date-fns";
-import { ScheduleRepository } from "../../Schedule/repository/schedule.repository";
 import { UserResponse } from "@/modules/users/types/user.types";
+import { PermissionType } from "@/modules/attendance/types/attendance.types";
 
 @injectable()
 export class ScheduleExceptionService {
@@ -35,8 +34,6 @@ export class ScheduleExceptionService {
     private workplaceRepository: WorkplaceRepository,
     @inject("PositionRepository")
     private positionRepository: PositionRepository,
-    @inject("ScheduleRepository")
-    private scheduleRepository: ScheduleRepository,
     @inject("ScheduleExceptionValidator")
     private validator: ScheduleExceptionValidator
   ) {}
@@ -51,8 +48,6 @@ export class ScheduleExceptionService {
     try {
       // Verificar si el usuario es superadmin
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-
-      console.log("🚀 data:", data);
 
       // Validaciones según el tipo de excepción
       await this.validateExceptionData(data);
@@ -155,9 +150,8 @@ export class ScheduleExceptionService {
         : user.companyId;
 
       // Aseguramos que companyId esté definida
-      if (!companyId) {
+      if (!companyId)
         throw new AppError("No se pudo determinar la compañía asociada.", 400);
-      }
 
       // Sobreescribimos companyId en data
       data.companyId = companyId;
@@ -186,13 +180,8 @@ export class ScheduleExceptionService {
         );
 
       if (assistanceType) {
-        console.log(
-          "🕒 Creando registros de asistencia con tipo:",
-          assistanceType
-        );
-
         // Verificar que el tipo de asistencia sea válido
-        const validAssistanceTypes = Object.values(AsistentType);
+        const validAssistanceTypes = Object.values(PermissionType);
         if (validAssistanceTypes.includes(assistanceType)) {
           await this.createDefaultAttendanceRecordsForException(
             data, // Pasamos los datos completos (incluye assistanceType)
@@ -220,7 +209,7 @@ export class ScheduleExceptionService {
 
   async createDefaultAttendanceRecordsForException(
     exception: CreateScheduleExceptionDTO,
-    assistanceType: AsistentType
+    assistanceType: PermissionType
   ): Promise<void> {
     try {
       // Determinar el ID de la entidad target
@@ -245,39 +234,19 @@ export class ScheduleExceptionService {
           );
       }
 
-      console.log("🎯 Target ID:", targetId);
-
       // Obtener usuarios afectados
       const usersAffected = await this.userRepository.findUsersByTarget(
         exception.exceptionType,
         targetId
       );
 
-      console.log("👥 Usuarios afectados:", usersAffected.length);
-
-      if (usersAffected.length === 0) {
-        console.warn("⚠️ No se encontraron usuarios afectados");
-        return;
-      }
-
       // Procesar cada usuario
       for (const user of usersAffected) {
-        console.log(`👤 Procesando usuario: ${user.name} (${user.id})`);
-
         let currentDate = new Date(exception.startDate);
         const endDate = new Date(exception.endDate ?? exception.startDate);
 
-        console.log(
-          `📅 Período: ${currentDate.toISOString().split("T")[0]} a ${
-            endDate.toISOString().split("T")[0]
-          }`
-        );
-
         while (currentDate <= endDate) {
           const dateForRecord = new Date(currentDate);
-          console.log(
-            `📅 Procesando fecha: ${dateForRecord.toISOString().split("T")[0]}`
-          );
 
           // Verificar si ya existe un registro para esta fecha y usuario
           const existingRecord = await this.attendanceRepository.findAttendance(
@@ -288,8 +257,6 @@ export class ScheduleExceptionService {
           );
 
           if (!existingRecord) {
-            console.log("➕ Creando nuevo registro de asistencia");
-
             // Crear nuevo registro
             const attendanceData = {
               userId: user.id,
@@ -307,17 +274,16 @@ export class ScheduleExceptionService {
               notes: `Generado automáticamente por excepción de horario`,
             };
 
-            const typesWithoutCheckInOut: AsistentType[] = [
-              AsistentType.VACATION,
-              AsistentType.MEDICAL_LEAVE,
-              AsistentType.JUSTIFIED_ABSENCE,
-              AsistentType.INJUSTIFIED_ABSENCE,
-              AsistentType.ABSENT,
+            const typesWithoutCheckInOut: PermissionType[] = [
+              PermissionType.VACATION,
+              PermissionType.MEDICAL_LEAVE,
+              PermissionType.JUSTIFIED_ABSENCE,
+              PermissionType.INJUSTIFIED_ABSENCE,
             ];
 
             // Validación para días completos y por ausencia
             const isTypeWithoutCheckInOut = typesWithoutCheckInOut.includes(
-              assistanceType as AsistentType
+              assistanceType as PermissionType
             );
 
             // Si no es día libre y el tipo sí requiere horas, valida que tenga checkIn o checkOut
@@ -332,10 +298,7 @@ export class ScheduleExceptionService {
             await this.attendanceRepository.createReportAttendance(
               attendanceData
             );
-            console.log("✅ Registro creado exitosamente");
           } else {
-            console.log("🔄 Actualizando registro existente");
-
             // Actualizar registro existente
             await this.attendanceRepository.updateReportAttendance(
               existingRecord.id,
@@ -347,17 +310,13 @@ export class ScheduleExceptionService {
                 notes: "Actualizado por excepción de horario",
               }
             );
-            console.log("✅ Registro actualizado exitosamente");
           }
 
           // Avanzar al siguiente día
           currentDate.setDate(currentDate.getDate() + 1);
         }
       }
-
-      console.log("🎉 Proceso completado exitosamente");
     } catch (error: any) {
-      console.error("❌ Error creando registros de asistencia:", error);
       throw new AppError(
         `Error al crear registros de asistencia: ${error.message}`,
         500
@@ -403,11 +362,12 @@ export class ScheduleExceptionService {
           throw new AppError("Tipo de excepción no válido.", 400);
       }
 
-      const usersAffected = await this.scheduleExceptionRepository.findUsersByTarget(
-        exception.exceptionType,
-        targetId,
-        isSuperAdmin ? undefined : user.companyId
-      );
+      const usersAffected =
+        await this.scheduleExceptionRepository.findUsersByTarget(
+          exception.exceptionType,
+          targetId,
+          isSuperAdmin ? undefined : user.companyId
+        );
 
       const usersMapped = usersAffected.map((user) => ({
         ...user,

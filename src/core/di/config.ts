@@ -62,16 +62,12 @@ import { ReportAttendanceRepository } from "../../modules/attendance/repository/
 import { ScheduleChangeRepository } from "@/modules/schedule/scheduleChange/repository/scheduleChange.repository";
 import { ScheduleChangeService } from "@/modules/schedule/scheduleChange/services/scheduleChange.service";
 import { ScheduleChangeController } from "@/modules/schedule/scheduleChange/controller/scheduleChange.controller";
-import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
-import { PermissionTypeService } from "@/modules/permissionsType/services/permissionType.service";
-import { PermissionTypeController } from "@/modules/permissionsType/controllers/permissionType.controller";
 import { ScheduleExceptionController } from "@/modules/schedule/scheduleException/controller/scheduleException.controller";
 import { ScheduleExceptionService } from "@/modules/schedule/scheduleException/services/scheduleException.service";
 import { ScheduleExceptionRepository } from "@/modules/schedule/scheduleException/repository/scheduleException.repository";
 import { ScheduleExceptionValidator } from "@/modules/schedule/scheduleException/validator/scheduleException.validator";
 
 export const configureDependencies = () => {
-
   // Register Prisma
   DependencyContainer.registerInstance(PRISMA_TOKEN, prisma);
 
@@ -139,10 +135,6 @@ export const configureDependencies = () => {
   DependencyContainer.registerSingleton<ScheduleChangeRepository>(
     "ScheduleChangeRepository",
     ScheduleChangeRepository
-  );
-  DependencyContainer.registerSingleton<PermissionTypeRepository>(
-    "PermissionTypeRepository",
-    PermissionTypeRepository
   );
   DependencyContainer.registerSingleton<ScheduleExceptionRepository>(
     "ScheduleExceptionRepository",
@@ -271,10 +263,6 @@ export const configureDependencies = () => {
     ScheduleChangeService
   );
 
-  DependencyContainer.registerSingleton<PermissionTypeService>(
-    "PermissionTypeService",
-    PermissionTypeService
-  );
   DependencyContainer.registerSingleton<ScheduleExceptionService>(
     "ScheduleExceptionService",
     ScheduleExceptionService
@@ -344,10 +332,6 @@ export const configureDependencies = () => {
   DependencyContainer.registerSingleton<ScheduleChangeController>(
     "ScheduleChangeController",
     ScheduleChangeController
-  );
-  DependencyContainer.registerSingleton<PermissionTypeController>(
-    "PermissionTypeController",
-    PermissionTypeController
   );
   DependencyContainer.registerSingleton<ScheduleExceptionController>(
     "ScheduleExceptionController",

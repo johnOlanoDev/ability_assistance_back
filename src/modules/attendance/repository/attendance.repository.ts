@@ -240,9 +240,6 @@ export class AttendanceRepository implements IAttendancePort {
         schedule: data.scheduleId
           ? { connect: { id: data.scheduleId } }
           : undefined,
-        typePermission: data.typePermissionId
-          ? { connect: { id: data.typePermissionId } }
-          : undefined,
         checkOut: null,
       },
       include: {
