@@ -126,10 +126,15 @@ model ScheduleChange {
 }
 
 model ScheduleException {
-  id          String     @id @default(uuid())
-  schedule    Schedule?  @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
-  scheduleId  String? // Opcional
-  userId      String? // Opcional para excepciones individuales
+  id         String    @id @default(uuid())
+  schedule   Schedule? @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId String? // Opcional
+
+  user   User?   @relation(fields: [userId], references: [id])
+  userId String? // Opcional para excepciones individuales
+
+  exceptionType ExceptionType
+
   workplaceId String? // Para excepciones a nivel de área
   workplace   Workplace? @relation(fields: [workplaceId], references: [id])
 
@@ -139,30 +144,42 @@ model ScheduleException {
   companyId String? // Para excepciones globales (ej: feriados nacionales)
   company   Company? @relation(fields: [companyId], references: [id])
 
-  date     DateTime @db.Date
-  checkIn  String?
-  checkOut String?
-  isDayOff Boolean  @default(false)
-  reason   String   @db.VarChar(200)
+  // Período de ausencia
+  startDate    DateTime @db.Date // Fecha de inicio 
+  endDate      DateTime @db.Date // Fecha de fin
+  durationDays Int // Duración calculada en días
 
-  user User? @relation(fields: [userId], references: [id])
+  // Datos de horario
+  isDayOff Boolean @default(false) // Día completo libre
+  checkIn  String? // Hora de entrada (si no es día completo)
+  checkOut String? // Hora de salida (si no es día completo)
+
+  reason String @db.VarChar(500) // Motivo de la ausencia
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  // Asegurar que al menos una entidad esté asociada
   // Restricciones para evitar duplicados
-  @@unique([scheduleId, date], name: "unique_schedule_exception_date")
-  @@unique([userId, date], name: "unique_user_exception_date")
-  @@unique([workplaceId, date], name: "unique_workplace_exception_date")
-  @@unique([positionId, date], name: "unique_position_exception_date")
-  @@unique([companyId, date], name: "unique_company_exception_date")
-  @@index([userId, date])
-  @@index([scheduleId, date])
-  @@index([workplaceId, date])
-  @@index([positionId, date])
-  @@index([companyId, date])
+  @@unique([scheduleId, startDate, endDate], name: "unique_schedule_exception_period")
+  @@unique([userId, startDate, endDate], name: "unique_user_exception_period")
+  @@unique([workplaceId, startDate, endDate], name: "unique_workplace_exception_period")
+  @@unique([positionId, startDate, endDate], name: "unique_position_exception_period")
+  @@unique([companyId, startDate, endDate], name: "unique_company_exception_period")
+  // Índices optimizados
+  @@index([userId, startDate, endDate])
+  @@index([scheduleId, startDate, endDate])
+  @@index([workplaceId, startDate, endDate])
+  @@index([positionId, startDate, endDate])
+  @@index([companyId, startDate, endDate])
+}
+
+enum ExceptionType {
+  INDIVIDUAL
+  WORKPLACE
+  POSITION
+  COMPANY
+  HOLIDAY
 }
 
 enum DayOfWeek {
@@ -381,10 +398,10 @@ model RolePermission {
 
 model ReportAttendance {
   id                String          @id @default(uuid()) @db.Char(36)
-  scheduleId        String
-  schedule          Schedule        @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  scheduleId        String?
+  schedule          Schedule?       @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
   date              DateTime        @db.Date
-  checkIn           DateTime        @db.Time(6)
+  checkIn           DateTime?       @db.Time(6)
   checkOut          DateTime?       @db.Time(6)
   locationLatitude  Decimal?        @db.Decimal(9, 6)
   locationLongitude Decimal?        @db.Decimal(9, 6)

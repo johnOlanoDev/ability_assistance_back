@@ -92,15 +92,27 @@ export class PositionRepository implements IPositionRepository {
     });
   }
 
-  async getPositionsByWorkplace(workplaceId: string, companyId?: string) {
-    return this.prisma.position.findMany({
+  async getPositionsByWorkplace(
+    workplaceId: string,
+    companyId?: string
+  ): Promise<PositionResponse[]> {
+    console.log(`Buscando posiciones para el área de trabajo: ${workplaceId}`);
+
+    const positions = await this.prisma.position.findMany({
       where: {
-        workplaceId,
-        ...(companyId ? { companyId } : {}),
+        workplaceId: workplaceId,
+        companyId: companyId || undefined,
         status: true,
+        deletedAt: null,
       },
-      include: { company: true },
+      include: {
+        company: true,
+        workplace: true,
+      },
     });
+
+    console.log(`Se encontraron ${positions.length} posiciones`);
+    return positions;
   }
 
   async getPositionByUser(userId?: string) {
@@ -147,15 +159,15 @@ export class PositionRepository implements IPositionRepository {
   // Validar si el nombre de la posición ya existe (excluyendo el ID actual)
   async findByName(
     name: string,
-    excludeId?: string,
-    companyId?: string
+    companyId?: string,
+    excludeId?: string
   ): Promise<boolean> {
     const position = await this.prisma.position.findFirst({
       where: {
-        name: name.trim(),
+        name,
         companyId,
         status: true,
-        id: excludeId ? { not: excludeId } : undefined, // Excluir el ID actual
+        NOT: excludeId ? { id: excludeId } : undefined,
       },
     });
 

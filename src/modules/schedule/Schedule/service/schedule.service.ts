@@ -13,12 +13,15 @@ import { ScheduleValidator } from "../validator/schedule.validator";
 import { transformScheduleRanges } from "../repository/schedule.repository";
 import { UserRepository } from "@/modules/users/repository/user.repository";
 import { Prisma } from "@prisma/client";
+import { PositionRepository } from "@/modules/position/repository/position.repository";
 
 @injectable()
 export class ScheduleService {
   constructor(
     @inject("ScheduleRepository")
     private scheduleRepository: ScheduleRepository,
+    @inject("PositionRepository")
+    private positionRepository: PositionRepository,
     @inject("UserRepository")
     private userRepository: UserRepository,
     @inject("PermissionUtils") private permissionUtils: PermissionUtils,
@@ -146,49 +149,61 @@ export class ScheduleService {
   async createSchedule(
     scheduleData: CreateScheduleDTO,
     user: { roleId: string; companyId?: string }
-  ): Promise<ScheduleResponse> {
+  ): Promise<ScheduleResponse[]> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
     const companyId = isSuperAdmin ? scheduleData.companyId : user.companyId;
 
-    // 👉 Validaciones sólo si NO es SuperAdmin
-    if (!isSuperAdmin) {
-      await Promise.all([
-        this.scheduleValidator.validateCompanyExists(user, companyId),
-        this.scheduleValidator.validateWorkplaceExists(
-          user,
-          scheduleData.workplaceId ?? undefined
-        ),
-        this.scheduleValidator.validatePositionExists(
-          user,
-          scheduleData.positionId ?? undefined
-        ),
-        this.scheduleValidator.validateCompanyActive(user, companyId),
-        this.scheduleValidator.validateWorkplaceActive(
-          user,
-          scheduleData.workplaceId ?? undefined
-        ),
-        this.scheduleValidator.validatePositionActive(
-          user,
-          scheduleData.positionId ?? undefined
-        ),
-        this.scheduleValidator.validateScheduleExists(
-          user,
-          scheduleData.workplaceId ?? undefined,
-          scheduleData.positionId
-        ),
-        this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(
-          user,
-          scheduleData.workplaceId ?? undefined,
-          scheduleData.positionId,
-          companyId
-        ),
-      ]);
-    }
+    // Validaciones...
+
+    const { workplaceId, positionId } = scheduleData;
+    let positions: { id: string }[] = [];
 
     try {
-      const scheduleToCreate = {
+      // Verificar explícitamente si positionId es null, undefined o cadena vacía
+      if (
+        positionId === null ||
+        positionId === undefined ||
+        positionId === ""
+      ) {
+        console.log(
+          "No se proporcionó un positionId, creando horarios para todas las posiciones del área"
+        );
+
+        // Validar que se proporcionó un workplaceId
+        if (!workplaceId) {
+          throw new AppError(
+            "Se requiere un área de trabajo para crear horarios para todas las posiciones.",
+            400
+          );
+        }
+
+        const workplacePositions =
+          await this.positionRepository.getPositionsByWorkplace(workplaceId);
+        if (!workplacePositions || workplacePositions.length === 0) {
+          throw new AppError(
+            "No se encontraron posiciones para el área de trabajo.",
+            404
+          );
+        }
+
+        // Mapear todas las posiciones encontradas
+        positions = workplacePositions.map((position) => ({
+          id: position.id,
+        }));
+
+        console.log(
+          `Se crearán ${positions.length} horarios para las posiciones del área`
+        );
+      } else {
+        console.log(`Se creará un horario para la posición: ${positionId}`);
+        positions.push({ id: positionId });
+      }
+
+      // Preparar los datos para todos los horarios que se crearán
+      const scheduleDataToCreate = positions.map((position) => ({
         ...scheduleData,
-        companyId: companyId,
+        companyId,
+        positionId: position.id, // Usar el ID de posición específico
         scheduleRanges:
           scheduleData.scheduleRanges?.map((range) => ({
             startDay: range.startDay,
@@ -197,27 +212,14 @@ export class ScheduleService {
             checkOut: this.convertTimeToISO(range.checkOut),
             isNightShift: !!range.isNightShift,
           })) || [],
-      };
+      }));
 
-      const newSchedule = await this.scheduleRepository.createSchedule(
-        scheduleToCreate
+      // Crear todos los horarios en una sola operación transaccional
+      return await this.scheduleRepository.createManySchedules(
+        scheduleDataToCreate
       );
-
-      if (!newSchedule) {
-        throw new AppError("Error al crear el horario.", 500);
-      }
-
-      return newSchedule;
     } catch (error: any) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        if (error.code === "P2002") {
-          // Es un error por clave única duplicada
-          throw new AppError(
-            "Ya existe un horario registrado para esta combinación de área de trabajo y posición.",
-            400
-          );
-        }
-      }
+      // Manejo de errores...
       throw new AppError(`Error al crear el horario: ${error.message}`, 500);
     }
   }

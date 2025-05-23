@@ -11,17 +11,10 @@ const router = express.Router();
 
 // Initialize routes function
 async function initializeRoutes() {
-    console.log("Initializing routes from:", PATH_ROUTES);
-    
     // List all files in the directory to see what's available
     const allFiles = fs.readdirSync(PATH_ROUTES);
-    console.log("All files in directory:", allFiles);
     
-    console.log("Current environment:", process.env.NODE_ENV);
-    
-
     const isProduction = process.env.NODE_ENV !== "development";
-    console.log("Is production environment:", isProduction);
     
     // Adjust filter based on environment
     const routeFiles = allFiles.filter((file) => {
@@ -35,7 +28,6 @@ async function initializeRoutes() {
         return isRouteFile && isNotIndex;
     });
     
-    console.log("Route files to load:", routeFiles);
     
     // If no route files found, log extra info
     if (routeFiles.length === 0) {
@@ -62,16 +54,12 @@ async function initializeRoutes() {
             const modulePath = join(PATH_ROUTES, file);
             const moduleURL = pathToFileURL(modulePath).href;
             
-            console.log(`Importing module from: ${moduleURL}`);
-            
             const module = await import(moduleURL);
             
             if (module.default) {
-                console.log(`Registered route: ${routePath}`);
                 router.use(routePath, module.default);
             } else if (module.router) {
                 // Some modules might export 'router' instead of default
-                console.log(`Registered route (router export): ${routePath}`);
                 router.use(routePath, module.router);
             } else {
                 console.warn(`Module ${file} has no router export`);

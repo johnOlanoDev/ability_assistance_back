@@ -19,7 +19,7 @@ import {
 import { PermissionTypeRepository } from "@/modules/permissionsType/repository/permissionType.repository";
 import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
 import { Decimal, PrismaClientKnownRequestError } from "@/prisma";
-import { REFERENCE_LOCATION } from "@/config/location";
+import { startOfDay } from "date-fns";
 
 @injectable()
 export class AttendanceService {
@@ -51,6 +51,51 @@ export class AttendanceService {
     const transformedData = data.map(transformAttendanceResponse);
 
     return transformedData;
+  }
+
+  async getAttendanceByScheduleId(
+    scheduleId: string,
+    user: { roleId: string; companyId?: string }
+  ) {
+    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+
+    const companyId = isSuperAdmin ? undefined : user.companyId;
+
+    if (!isSuperAdmin && !isAdmin) {
+      throw new AppError("No tienes permiso para obtener asistencias", 403);
+    }
+
+    if (isSuperAdmin) {
+      return await this.attendanceRepository.findReportByScheduleId(scheduleId);
+    }
+
+    return await this.attendanceRepository.findReportByScheduleId(
+      scheduleId,
+      companyId
+    );
+  }
+
+  async findScheduleReportByUserId(
+    userId: string,
+    scheduleId: string,
+    user: { roleId: string; companyId?: string }
+  ): Promise<ReportAttendanceResponse> {
+    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const companyId = isSuperAdmin ? undefined : user.companyId;
+
+    if (isSuperAdmin) {
+      return await this.attendanceRepository.findScheduleReportByUserId(
+        userId,
+        scheduleId
+      );
+    }
+
+    return await this.attendanceRepository.findScheduleReportByUserId(
+      userId,
+      scheduleId,
+      companyId
+    );
   }
 
   async getUserAttendance(user: {
@@ -292,8 +337,7 @@ export class AttendanceService {
       }
 
       // Fecha de asistencia (sin hora)
-      const attendanceDate = new Date();
-      attendanceDate.setUTCHours(0, 0, 0, 0);
+      const attendanceDate = startOfDay(new Date());
 
       if (isNaN(attendanceDate.getTime()))
         throw new AppError("Fecha de registro inválida", 400);
@@ -328,7 +372,7 @@ export class AttendanceService {
           userId: user.userId,
           companyId: companyId ? companyId : "",
           scheduleId: schedule.id,
-          date: new Date().toISOString(), // Fecha completa en UTC
+          date: attendanceDate,
           checkIn: utcCheckIn.toISOString(), // Hora convertida a UTC
           locationLatitude: data.locationLatitude
             ? new Decimal(data.locationLatitude)
@@ -353,6 +397,8 @@ export class AttendanceService {
         permissionDuration: permissionDuration || 0, // Valor predeterminado si no hay permisos
         adjustedHoursWorked: adjustedHoursWorked || 0, // Valor predeterminado si no hay horas ajustadas
       };
+
+      console.log("🚀 responseData:", responseData);
 
       return transformAttendanceResponse(responseData);
     } catch (error: any) {
@@ -414,7 +460,7 @@ export class AttendanceService {
         validateCoordinates(latitude, longitude);
 
         // Calcular distancia desde la ubicación de referencia
-        const distance = getDistance(
+        /* const distance = getDistance(
           REFERENCE_LOCATION.latitude,
           REFERENCE_LOCATION.longitude,
           latitude,
@@ -430,7 +476,7 @@ export class AttendanceService {
             )} km del lugar autorizado. Debes estar a menos de ${MAX_DISTANCE_ALLOWED_KM} km para registrar tu asistencia.`,
             400
           );
-        }
+        } */
 
         readableAddress = await getReadableAddress(latitude, longitude);
       }
@@ -551,46 +597,6 @@ export class AttendanceService {
     });
   }
 
-  async assignPermissionToAttendance(
-    attendanceId: string,
-    permissionId: string,
-    user: { roleId: string; companyId?: string }
-  ): Promise<ReportAttendanceResponse> {
-    try {
-      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-      const companyId = isSuperAdmin ? undefined : user.companyId;
-
-      // Verificar si el permiso existe
-      const permission = await this.permissionTypeRepository.getPermissionById(
-        permissionId,
-        companyId
-      );
-
-      if (!permission) {
-        throw new AppError("El tipo de permiso no existe", 404);
-      }
-
-      // Obtener el registro de asistencia
-      const attendance = await this.attendanceRepository.findById(attendanceId);
-      if (!attendance) {
-        throw new AppError("Registro de asistencia no encontrado", 404);
-      }
-      // Determinar el tipo de asistencia basado en el permiso
-      const typeAssistanceId = determineTypeAssistance(permission);
-
-      // Actualizar el registro de asistencia con el permiso
-      const updatedAttendance =
-        await this.attendanceRepository.updateReportAttendance(attendanceId, {
-          typePermissionId: permission.id,
-          typeAssistanceId,
-        });
-
-      return updatedAttendance;
-    } catch (error) {
-      console.error("Error asignando permiso a la asistencia:", error);
-      throw new AppError("Error interno del servidor", 500);
-    }
-  }
   // Validar la existencia de la empresa
   async validateCompanyExists(
     user: { roleId: string; companyId?: string },
@@ -683,28 +689,6 @@ const transformAttendanceResponse = (data: any): ReportAttendanceResponse => {
     permissionDuration: formatHours(permissionDurations || 0), // Horas de permiso
     adjustedHoursWorked: adjustedHoursWorkeds || 0, // Horas trabajadas totales
   };
-};
-
-const determineTypeAssistance = (
-  permission: PermissionTypeResponse
-): AsistentType => {
-  if (permission.typeAssistanceEffect) {
-    return permission.typeAssistanceEffect; // efecto definido en el permiso
-  }
-
-  if (permission.duration <= 4) {
-    return AsistentType.PERMISSION_HOURS; // Permiso temporal por horas
-  }
-
-  if (permission.name.toLowerCase().includes("vacaciones")) {
-    return AsistentType.VACATION; // Vacaciones
-  }
-
-  if (permission.name.toLowerCase().includes("médica")) {
-    return AsistentType.MEDICAL_LEAVE; // Ausencia médica
-  }
-
-  return AsistentType.PRESENT; // Valor predeterminado
 };
 
 // Convertir una hora ("HH:mm:ss") en un objeto Date válido

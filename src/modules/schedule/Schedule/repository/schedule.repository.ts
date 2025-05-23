@@ -169,9 +169,17 @@ export class ScheduleRepository implements IScheduleRepository {
       },
     });
 
+    const workplaceName = await this.prisma.workplace.findUnique({
+      where: { id: data.workplaceId },
+    });
+
+    const positionName = await this.prisma.position.findUnique({
+      where: { id: data.positionId },
+    });
+
     if (existing) {
       throw new AppError(
-        "Ya existe un horario activo para ese cargo en esta área."
+        `Ya existe un horario activo para ese cargo ${positionName?.name} en esta área ${workplaceName?.name}.`
       );
     }
 
@@ -210,6 +218,49 @@ export class ScheduleRepository implements IScheduleRepository {
       company: schedule.company ?? undefined,
       createdAt: localteCreatedAt,
     };
+  }
+
+  async createManySchedules(
+    scheduleDataArray: CreateScheduleDTO[]
+  ): Promise<ScheduleResponse[]> {
+    console.log(`Creando ${scheduleDataArray.length} horarios`);
+
+    const results: ScheduleResponse[] = [];
+
+    // Usar una transacción para crear todos los horarios
+    await this.prisma.$transaction(async (tx) => {
+      for (const scheduleData of scheduleDataArray) {
+        const schedule = await tx.schedule.create({
+          data: {
+            name: scheduleData.name,
+            workplaceId: scheduleData.workplaceId!,
+            positionId: scheduleData.positionId!,
+            companyId: scheduleData.companyId!,
+            scheduleRanges: {
+              create: scheduleData.scheduleRanges!.map((range) => ({
+                startDay: range.startDay,
+                endDay: range.endDay,
+                checkIn: range.checkIn,
+                checkOut: range.checkOut,
+                isNightShift: range.isNightShift,
+              })),
+            },
+          },
+          include: {
+            scheduleRanges: true,
+            workplace: true,
+            position: true,
+            company: true,
+          },
+        });
+
+        results.push(schedule);
+      }
+    }, {
+      timeout: 10000
+    });
+
+    return results;
   }
 
   async updateSchedule(
@@ -386,7 +437,7 @@ export class ScheduleRepository implements IScheduleRepository {
   async findActiveSchedule(
     workplaceId: string,
     positionId: string,
-    companyId: string,
+    companyId: string
   ) {
     return this.prisma.schedule.findFirst({
       where: {

@@ -68,6 +68,7 @@ import { PermissionTypeController } from "@/modules/permissionsType/controllers/
 import { ScheduleExceptionController } from "@/modules/schedule/scheduleException/controller/scheduleException.controller";
 import { ScheduleExceptionService } from "@/modules/schedule/scheduleException/services/scheduleException.service";
 import { ScheduleExceptionRepository } from "@/modules/schedule/scheduleException/repository/scheduleException.repository";
+import { ScheduleExceptionValidator } from "@/modules/schedule/scheduleException/validator/scheduleException.validator";
 
 export const configureDependencies = () => {
 
@@ -172,6 +173,11 @@ export const configureDependencies = () => {
   DependencyContainer.registerSingleton<ScheduleValidator>(
     "ScheduleValidator",
     ScheduleValidator
+  );
+
+  DependencyContainer.registerSingleton<ScheduleExceptionValidator>(
+    "ScheduleExceptionValidator",
+    ScheduleExceptionValidator
   );
 
   DependencyContainer.registerSingleton<PermissionUtils>(

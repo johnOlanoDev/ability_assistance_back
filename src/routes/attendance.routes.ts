@@ -19,7 +19,8 @@ const {
   getReportUserByDate,
   getUserAttendance,
   registerCheckoutAttendance,
-  assignPermissionToAttendance
+  getAttendanceByScheduleId,
+  findScheduleReportByUserId
 } = attendanceController;
 
 // Middleware para validar permisos específicos
@@ -82,12 +83,20 @@ router.put(
   updateCheckinAttendance
 );
 
-router.put(
-  "/assign-permission/:id",
+router.get(
+  "/schedule/:id",
   authenticate,
-  requirePermission(["attendance:manage", "attendance:update"]),
+  requirePermission(["attendance:manage", "attendance:self"]),
   validate,
-  assignPermissionToAttendance
+  getAttendanceByScheduleId
+);
+
+router.get(
+  "/schedule/user/:userId/:scheduleId",
+  authenticate,
+  requirePermission(["attendance:manage", "attendance:self"]),
+  validate,
+  findScheduleReportByUserId
 );
 
 

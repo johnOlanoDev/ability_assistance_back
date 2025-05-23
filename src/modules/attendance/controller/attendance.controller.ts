@@ -9,6 +9,60 @@ export class AttendanceController {
     @inject("AttendanceService") private attendanceService: AttendanceService
   ) {}
 
+  getAttendanceByScheduleId = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { id } = req.params;
+      const user = req.user;
+
+      const attendance = await this.attendanceService.getAttendanceByScheduleId(
+        id,
+        user
+      );
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Asistencia obtenida correctamente",
+        attendance,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  findScheduleReportByUserId = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { userId, scheduleId } = req.params;
+      const user = req.user;
+
+      const attendance =
+        await this.attendanceService.findScheduleReportByUserId(
+          userId,
+          scheduleId,
+          user
+        );
+
+      sendResponseSuccess(
+        res,
+        200,
+        "Asistencia obtenida correctamente",
+        attendance,
+        true
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // attendance.controller.ts
   getAttendanceHistory = async (
     req: Request,
@@ -16,7 +70,7 @@ export class AttendanceController {
     next: NextFunction
   ) => {
     try {
-      const user = req.user; 
+      const user = req.user;
 
       // Obtener el historial de asistencia
       const data = await this.attendanceService.getAttendanceHistory(user);
@@ -122,35 +176,6 @@ export class AttendanceController {
         checkinAttendance,
         user
       );
-
-      sendResponseSuccess(
-        res,
-        200,
-        "Asistencia actualizada correctamente",
-        attendance,
-        true
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  assignPermissionToAttendance = async (
-    req: Request,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { id } = req.params;
-      const { permissionId } = req.body;
-      const user = req.user;
-
-      const attendance =
-        await this.attendanceService.assignPermissionToAttendance(
-          id,
-          permissionId,
-          user
-        );
 
       sendResponseSuccess(
         res,

@@ -5,7 +5,6 @@ import { prisma } from "./prisma";
 import { configureDependencies } from "./core/di/config";
 import { getRoutes } from "./routes/index.routes";
 import { errorHandler } from "./middleware/errors/errorHandler";
-import { InitializationService } from "./modules/initial/services/initialization.service";
 import { DependencyContainer } from "./core/di/container";
 import { logger } from "./logger/logger";
 import "./utils/helper/markAbsentUsersForToday";
@@ -58,26 +57,16 @@ async function bootstrap() {
     // Conectar a la base de datos
     await prisma.$connect();
     console.log("Conexión a la base de datos establecida");
-    logger.info("Conexión a la base de datos establecida");
-
-    // Inicializar datos
-    const initialData = DependencyContainer.resolve(InitializationService);
-    console.log("Inicializando datos...");
-    await initialData.initialize();
-    console.log("Datos inicializados");
-    logger.info("Datos inicializados");
 
     // Iniciar servidor
     console.log("Server started");
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
-      logger.info(`Servidor iniciado en el puerto ${PORT}`);
     });
 
     return app; // Devolver la instancia de la aplicación
   } catch (e) {
     // Manejar errores globales
-    logger.error("Error starting server:", e);
     console.error("Error starting server:", e);
 
     // Asegurarse de desconectar recursos

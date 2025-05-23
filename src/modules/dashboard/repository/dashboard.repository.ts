@@ -1,4 +1,7 @@
-import { AsistentType } from "@/modules/attendance/types/attendance.types";
+import {
+  AsistentType,
+  PermissionType,
+} from "@/modules/attendance/types/attendance.types";
 import { inject, injectable } from "tsyringe";
 import { PRISMA_TOKEN, PrismaType } from "@/prisma";
 import { formatDecimalHours } from "@/utils/helper/formatDecimalHours";
@@ -55,6 +58,55 @@ export class DashboardRepository {
 
     if (!workplace || workplace.positions.length === 0) return [];
 
+    // Si NO se especifica un cargo, devolver métricas consolidadas de toda el área
+    if (!positionName) {
+      // Obtener todos los usuarios del área (todos los cargos)
+      const allUserIds = workplace.positions.flatMap((pos) =>
+        pos.users.map((u) => u.id)
+      );
+
+      if (allUserIds.length === 0) {
+        return [
+          {
+            name: `Área: ${workplace.name}`,
+            workplaceName: workplace.name,
+            count: 0,
+            onTime: 0,
+            late: 0,
+            absent: 0,
+            withPermission: 0,
+            totalEmployees: 0,
+            attendanceData: [
+              { type: "A tiempo", percentage: 0, count: 0 },
+              { type: "Tardanzas", percentage: 0, count: 0 },
+              { type: "Ausentes", percentage: 0, count: 0 },
+              { type: "Permiso", percentage: 0, count: 0 },
+            ],
+          },
+        ];
+      }
+
+      const consolidatedStats = await this.calculateAttendanceStats(
+        allUserIds,
+        companyId
+      );
+
+      return [
+        {
+          name: `Área: ${workplace.name}`,
+          workplaceName: workplace.name,
+          count: allUserIds.length,
+          isConsolidated: true, // Flag para identificar que es consolidado
+          positions: workplace.positions.map((pos) => ({
+            name: pos.name,
+            userCount: pos.users.length,
+          })),
+          ...consolidatedStats,
+        },
+      ];
+    }
+
+    // Si SÍ se especifica un cargo, devolver métricas específicas del cargo
     for (const position of workplace.positions) {
       const userIds = position.users.map((u) => u.id);
 
@@ -66,6 +118,7 @@ export class DashboardRepository {
         name: position.name,
         workplaceName: workplace.name,
         count: userIds.length,
+        isConsolidated: false,
         ...stats,
       });
     }
@@ -197,7 +250,7 @@ export class DashboardRepository {
       },
       where: {
         companyId: companyId || undefined,
-        userId: userId
+        userId: userId,
       },
       take: limit,
       include: {
@@ -206,8 +259,8 @@ export class DashboardRepository {
           include: {
             scheduleChanges: true,
             scheduleRanges: true,
-            scheduleExceptions: true
-          }
+            scheduleExceptions: true,
+          },
         },
         company: true,
         typePermission: true,
@@ -408,11 +461,7 @@ export class DashboardRepository {
 
     const filterCompany = companyId ? { companyId } : {};
 
-    const absenceTypes = [
-      AsistentType.ABSENT,
-      AsistentType.INJUSTIFIED_ABSENCE,
-      AsistentType.JUSTIFIED_ABSENCE,
-    ];
+    const absenceTypes = [AsistentType.ABSENT];
 
     const [absenceCurrent, totalCurrent] = await Promise.all([
       this.prisma.reportAttendance.count({
@@ -515,7 +564,8 @@ export class DashboardRepository {
 
   async getLateAttendancesThisMonth(
     dateRange: { start?: Date; end?: Date },
-    companyId?: string
+    companyId?: string,
+    userId?: string
   ) {
     const filter: any = {
       typeAssistanceId: AsistentType.LATE,
@@ -527,6 +577,7 @@ export class DashboardRepository {
           },
         }),
       ...(companyId ? { companyId } : {}),
+      userId: userId,
     };
 
     const attendances = await this.prisma.reportAttendance.findMany({
@@ -558,9 +609,9 @@ export class DashboardRepository {
   ) {
     const filter: any = {
       OR: [
-        { typeAssistanceId: AsistentType.PERMISSION_HOURS },
-        { typeAssistanceId: AsistentType.MEDICAL_LEAVE },
-        { typeAssistanceId: AsistentType.JUSTIFIED_ABSENCE },
+        { typeAssistanceId: PermissionType.PERMISSION_HOURS },
+        { typeAssistanceId: PermissionType.MEDICAL_LEAVE },
+        { typeAssistanceId: PermissionType.JUSTIFIED_ABSENCE },
       ],
       ...(dateRange.start &&
         dateRange.end && {

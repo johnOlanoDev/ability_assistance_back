@@ -3,9 +3,11 @@ import {
   CreateUserDTO,
   UpdateUserDTO,
   UpdateProfileDTO,
+  UserResponse,
 } from "../types/user.types";
 import { BcryptHelper } from "@/utils/helper/bcrypt.helper";
 import { PrismaType, DecimalType, PRISMA_TOKEN, Decimal } from "@/prisma";
+import { ExceptionType } from "@/modules/schedule/scheduleException/types/scheduleException.types";
 
 @injectable()
 export class UserRepository {
@@ -16,7 +18,7 @@ export class UserRepository {
     return await this.prisma.user.findMany({
       where: {
         companyId: companyId || undefined, // Solo filtra por companyId si es proporcionado
-        status: true
+        status: true,
       },
       include: {
         role: true,
@@ -103,6 +105,41 @@ export class UserRepository {
   ) {
     return this.prisma.user.findFirst({
       where: { companyId, numberDocument },
+    });
+  }
+
+  async findUsersByTarget(
+    exceptionType: ExceptionType,
+    entityId: string,
+    companyId?: string
+  ): Promise<UserResponse[]> {
+    let whereClause = {};
+
+    switch (exceptionType) {
+      case "INDIVIDUAL":
+        whereClause = { id: entityId, companyId: companyId || undefined };
+        break;
+      case "WORKPLACE":
+        whereClause = { workplaceId: entityId, companyId: companyId || undefined };
+        break;
+      case "POSITION":
+        whereClause = { positionId: entityId, companyId: companyId || undefined };
+        break;
+      case "COMPANY":
+      case "HOLIDAY":
+        whereClause = { companyId: entityId || undefined };
+        break;
+      default:
+        throw new Error("Tipo de excepción no válido");
+    }
+
+    return this.prisma.user.findMany({
+      where: whereClause,
+      include: {
+        company: true,
+        workplace: true,
+        position: true,
+      },
     });
   }
 

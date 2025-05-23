@@ -134,34 +134,17 @@ export class PositionService {
     user: { roleId: string; companyId?: string }
   ): Promise<PositionResponse> {
     const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+    const companyId = isSuperAdmin ? positionData.companyId : user.companyId;
 
-    let companyId;
+    console.log("Datos recibidos:", {
+      name: positionData.name,
+      companyId,
+    });
 
-    const trimmedName = positionData.name.trim();
-
-    if (isSuperAdmin) {
-      if (!positionData.companyId) {
-        throw new AppError("Debe proporcionar el ID de la empresa", 400);
-      }
-      companyId = positionData.companyId;
-    } else {
-      if (!user.companyId) {
-        throw new AppError("No tienes una empresa asignada", 401);
-      }
-      companyId = user.companyId;
-    }
-
-    const workplace = await this.workplaceRepository.getWorkPlaceById(
-      positionData.workplaceId
+    await this.validatePositionExistingInCompany(
+      positionData.name,
+      companyId
     );
-    if (!workplace || workplace.companyId !== companyId) {
-      throw new AppError(
-        "El área de trabajo seleccionada no pertenece a la empresa",
-        400
-      );
-    }
-
-    await this.validatePositionExistingInCompany(trimmedName, companyId);
 
     await this.validateCompanyExists(user, companyId);
 
@@ -169,8 +152,6 @@ export class PositionService {
 
     return this.positionRepository.createPosition({
       ...positionData,
-      name: trimmedName,
-      companyId,
     });
   }
 
@@ -268,8 +249,12 @@ export class PositionService {
     const existingPosition = await this.positionRepository.findByName(
       name,
       companyId,
-      id
+      id,
     );
+
+    console.log("Recibido en validación:", { name, companyId, id });
+
+    console.log("Encontrado:", existingPosition);
 
     if (existingPosition) {
       throw new AppError(

@@ -12,17 +12,31 @@ const scheduleExceptionController = DependencyContainer.resolve(
   ScheduleExceptionController
 );
 const {
-  configureNationalHolidays,
   createScheduleException,
   deleteScheduleException,
   getScheduleExceptionById,
   getScheduleExceptions,
   updateScheduleException,
+  checkOverlappingExceptions,
+  getScheduleExceptionByDate,
+  findUsersByTarget,
+  createHoliday,
+  checkIsHoliday,
+  getHolidays,
+  importHolidays,
 } = scheduleExceptionController;
 
 // Middleware para validar permisos específicos
 const requirePermission = (permissions: string[]) =>
   validateCompanyPermission(permissions);
+
+router.get(
+  "/:id/users",
+  authenticate,
+  requirePermission(["schedule:read", "schedule:self"]),
+  validate,
+  findUsersByTarget
+);
 
 router.get(
   "/all",
@@ -48,14 +62,6 @@ router.post(
   createScheduleException
 );
 
-router.post(
-  "/national-holidays",
-  authenticate,
-  requirePermission(["schedule:manage"]),
-  validate,
-  configureNationalHolidays
-);
-
 router.put(
   "/update/:id",
   authenticate,
@@ -70,6 +76,54 @@ router.delete(
   requirePermission(["schedule:manage"]),
   validate,
   deleteScheduleException
+);
+
+router.post(
+  "/check-overlaps",
+  authenticate,
+  requirePermission(["schedule:read"]),
+  validate,
+  checkOverlappingExceptions
+);
+
+router.get(
+  "/date/check",
+  authenticate,
+  requirePermission(["schedule:read"]),
+  validate,
+  getScheduleExceptionByDate
+);
+
+router.post(
+  "/holiday/create",
+  authenticate,
+  requirePermission(["schedule:manage"]),
+  validate,
+  createHoliday
+);
+
+router.get(
+  "/holiday/check",
+  authenticate,
+  requirePermission(["schedule:read"]),
+  validate,
+  checkIsHoliday
+);
+
+router.get(
+  "/holiday/all",
+  authenticate,
+  requirePermission(["schedule:read"]),
+  validate,
+  getHolidays
+);
+
+router.post(
+  "/holiday/import",
+  authenticate,
+  requirePermission(["schedule:manage"]),
+  validate,
+  importHolidays
 );
 
 export default router;

@@ -1,7 +1,7 @@
 // src/modules/scheduleException/infrastructure/scheduleExceptionRepository.ts
-
 import {
   CreateScheduleExceptionDTO,
+  ExceptionType,
   ScheduleExceptionFilters,
   ScheduleExceptionResponse,
   UpdateScheduleExceptionDTO,
@@ -10,7 +10,10 @@ import { inject, injectable } from "tsyringe";
 import { IScheduleExceptionRepository } from "../port/scheduleException.port";
 import { AppError } from "@/middleware/errors/AppError";
 import { PRISMA_TOKEN, PrismaType } from "@/prisma";
-
+import { differenceInDays } from "date-fns";
+import { Prisma } from "@prisma/client";
+import { UserResponse } from "@/modules/users/types/user.types";
+import { toExceptionType } from "@/utils/helper/toExceptionType";
 @injectable()
 export class ScheduleExceptionRepository
   implements IScheduleExceptionRepository
@@ -20,138 +23,388 @@ export class ScheduleExceptionRepository
   async findScheduleExceptionById(
     id: string
   ): Promise<ScheduleExceptionResponse | null> {
-    const scheduleException = await this.prisma.scheduleException.findUnique({
-      where: { id, deletedAt: null },
+    const exception = await this.prisma.scheduleException.findUnique({
+      where: { id },
       include: {
-        schedule: true,
         user: true,
+        schedule: true,
+        company: true,
+        position: true,
+        workplace: true,
       },
     });
 
-    return scheduleException as ScheduleExceptionResponse | null;
+    if (!exception) return null;
+
+    return {
+      ...exception,
+      exceptionType: toExceptionType(exception.exceptionType),
+      user: exception.user || undefined,
+      workplace: exception.workplace || undefined,
+      position: exception.position || undefined,
+      company: exception.company || undefined,
+      schedule: exception.schedule || undefined,
+    };
   }
 
-  async findScheduleExceptionsByFilters(
-    filters: ScheduleExceptionFilters
-  ): Promise<ScheduleExceptionResponse[]> {
-    const {
-      scheduleId,
-      userId,
-      workplaceId,
-      positionId,
-      companyId,
-      fromDate,
-      toDate,
-      isDayOff,
-    } = filters;
+  async findUsersByTarget(
+    exceptionType: ExceptionType,
+    targetId: string,
+    companyId?: string
+  ): Promise<UserResponse[]> {
+    switch (exceptionType) {
+      case ExceptionType.INDIVIDUAL:
+        return this.prisma.user.findMany({
+          where: { id: targetId },
+          include: {
+            workplace: true,
+            position: true,
+            company: true,
+          },
+        });
+      case ExceptionType.WORKPLACE:
+        return this.prisma.user.findMany({
+          where: { workplaceId: targetId },
+          include: {
+            workplace: true,
+            position: true,
+            company: true,
+          },
+        });
+      case ExceptionType.POSITION:
+        return this.prisma.user.findMany({
+          where: { positionId: targetId },
+          include: {
+            workplace: true,
+            position: true,
+            company: true,
+          },
+        });
+      case ExceptionType.COMPANY:
+      case ExceptionType.HOLIDAY:
+        return this.prisma.user.findMany({
+          where: { companyId: targetId },
+          include: {
+            workplace: true,
+            position: true,
+            company: true,
+          },
+        });
+      default:
+        throw new Error(`Tipo de excepción no soportado: ${exceptionType}`);
+    }
+  }
 
-    const where: any = {
+  async createScheduleException(data: any): Promise<ScheduleExceptionResponse> {
+    try {
+      const durationDays = differenceInDays(data.endDate, data.startDate);
+
+      const exception = await this.prisma.scheduleException.create({
+        data: {
+          scheduleId: data.scheduleId ?? undefined,
+          userId:
+            data.exceptionType === ExceptionType.INDIVIDUAL
+              ? data.userId
+              : undefined,
+          workplaceId:
+            data.exceptionType === ExceptionType.WORKPLACE
+              ? data.workplaceId
+              : undefined,
+          positionId:
+            data.exceptionType === ExceptionType.POSITION
+              ? data.positionId
+              : undefined,
+          companyId:
+            data.exceptionType === ExceptionType.COMPANY
+              ? data.companyId
+              : undefined,
+          exceptionType: data.exceptionType,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          durationDays,
+          isDayOff: data.isDayOff,
+          checkIn: !data.isDayOff ? data.checkIn : undefined,
+          checkOut: !data.isDayOff ? data.checkOut : undefined,
+          reason: data.reason,
+        },
+        include: {
+          user: true,
+          schedule: true,
+          company: true,
+          position: true,
+          workplace: true,
+        },
+      });
+
+      return {
+        ...exception,
+        exceptionType: toExceptionType(exception.exceptionType),
+        schedule: exception.schedule || undefined,
+        user: exception.user || undefined,
+        company: exception.company || undefined,
+        position: exception.position || undefined,
+        workplace: exception.workplace || undefined,
+      };
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") {
+          // Error de unicidad
+          throw new AppError(
+            "Ya existe una excepción registrada para este período y entidad.",
+            400
+          );
+        }
+      }
+      throw new AppError(`Error al crear la excepción: ${error.message}`, 500);
+    }
+  }
+
+  async findActiveExceptionsForUser(
+    userId: string,
+    date: Date
+  ): Promise<ScheduleExceptionResponse[]> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        workplace: true,
+        position: true,
+        company: true,
+      },
+    });
+
+    if (!user) throw new Error("Usuario no encontrado");
+
+    const exceptions = await this.prisma.scheduleException.findMany({
+      where: {
+        OR: [
+          { companyId: user.companyId }, // Compañía
+          { positionId: user.positionId }, // Cargo
+          { workplaceId: user.workplaceId }, // Área
+          { userId: user.id }, // Individual
+        ],
+        startDate: { lte: date },
+        endDate: { gte: date },
+      },
+    });
+
+    return exceptions.map((exception) => ({
+      ...exception,
+      exceptionType: toExceptionType(exception.exceptionType),
+    }));
+  }
+
+  async findOverlappingExceptions(
+    exceptionType: ExceptionType,
+    entityId: string,
+    startDate: Date,
+    endDate: Date,
+    excludeExceptionId?: string
+  ): Promise<ScheduleExceptionResponse[]> {
+    const whereClause: any = {
       deletedAt: null,
-      ...(scheduleId && { scheduleId }),
-      ...(userId && { userId }),
-      ...(workplaceId && { workplaceId }),
-      ...(positionId && { positionId }),
-      ...(companyId && { companyId }),
-      ...(isDayOff !== undefined && { isDayOff }),
+
+      OR: [
+        // Caso 1 : La excepción existente comienza dentro del nuevo periodo
+        {
+          startDate: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+
+        // Caso 2: La excepción existente termina dentro del nuevo periodo
+        {
+          endDate: {
+            gte: startDate,
+            lte: endDate,
+          },
+        },
+
+        // Caso 3: La excepción existente abarca completamente el nuevo periodo
+        {
+          startDate: {
+            lte: startDate,
+            gte: endDate,
+          },
+        },
+      ],
     };
 
-    if (fromDate || toDate) {
-      where.date = {};
-      if (fromDate) where.date.gte = new Date(fromDate);
-      if (toDate) where.date.lte = new Date(toDate);
+    // Agregar el filtro por tipo de entidad
+    switch (exceptionType) {
+      case ExceptionType.INDIVIDUAL:
+        whereClause.userId = entityId;
+        break;
+      case ExceptionType.WORKPLACE:
+        whereClause.workplaceId = entityId;
+        break;
+      case ExceptionType.POSITION:
+        whereClause.positionId = entityId;
+        break;
+      case ExceptionType.COMPANY:
+        whereClause.companyId = entityId;
+        break;
     }
 
-    const scheduleExceptions = await this.prisma.scheduleException.findMany({
-      where,
+    if (excludeExceptionId) {
+      whereClause.id = { not: excludeExceptionId };
+    }
+
+    const overlappingExceptions = await this.prisma.scheduleException.findMany({
+      where: whereClause,
       include: {
-        schedule: true,
         user: true,
+        schedule: true,
+        company: true,
+        position: true,
+        workplace: true,
       },
-      orderBy: { date: "asc" },
     });
 
-    return scheduleExceptions as ScheduleExceptionResponse[];
+    return overlappingExceptions.map((exception) => ({
+      ...exception,
+      exceptionType: toExceptionType(exception.exceptionType),
+      user: exception.user || undefined,
+      schedule: exception.schedule || undefined,
+      company: exception.company || undefined,
+      position: exception.position || undefined,
+      workplace: exception.workplace || undefined,
+    }));
   }
 
-  async createScheduleException(
-    data: CreateScheduleExceptionDTO
-  ): Promise<ScheduleExceptionResponse> {
-    const {
-      scheduleId,
-      userId,
-      workplaceId,
-      positionId,
-      companyId,
-      date,
-      checkIn,
-      checkOut,
-      isDayOff,
-      reason,
-    } = data;
+  async findScheduleExceptions(
+    filters: ScheduleExceptionFilters,
+    page = 1,
+    limit = 10
+  ): Promise<{
+    data: ScheduleExceptionResponse[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const skip = (page - 1) * limit;
 
-    // Validar que al menos uno de los IDs esté presente
-    if (!scheduleId && !userId && !workplaceId && !positionId && !companyId) {
-      throw new AppError(
-        "Debe especificar al menos un nivel (horario, usuario, lugar de trabajo, posición o empresa)"
-      );
+    const where: any = { deletedAt: null };
+    if (filters.userId) where.userId = filters.userId;
+    if (filters.workplaceId) where.workplaceId = filters.workplaceId;
+    if (filters.positionId) where.positionId = filters.positionId;
+    if (filters.companyId) where.companyId = filters.companyId;
+    if (filters.scheduleId) where.scheduleId = filters.scheduleId;
+
+    // Filtros de fecha
+    if (filters.startDateFrom || filters.startDateTo) {
+      where.startDate = {};
+      if (filters.startDateFrom) where.startDate.gte = filters.startDateFrom;
+      if (filters.startDateTo) where.startDate.lte = filters.startDateTo;
     }
 
-    const scheduleException = await this.prisma.scheduleException.create({
-      data: {
-        scheduleId: scheduleId || undefined,
-        userId: userId || undefined,
-        workplaceId: workplaceId || undefined,
-        positionId: positionId || undefined,
-        companyId: companyId || undefined,
-        date: date,
-        checkOut: checkOut || undefined,
-        checkIn: checkIn || undefined,
-        isDayOff: isDayOff ?? false,
-        reason,
-      },
-      include: {
-        schedule: true,
-        user: true,
-      },
-    });
+    if (filters.endDateFrom || filters.endDateTo) {
+      where.endDate = {};
+      if (filters.endDateFrom) where.endDate.gte = filters.endDateFrom;
+      if (filters.endDateTo) where.endDate.lte = filters.endDateTo;
+    }
 
-    return scheduleException as ScheduleExceptionResponse;
+    // Obtener datos y total
+    const [data, total] = await Promise.all([
+      this.prisma.scheduleException.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { startDate: "desc" },
+        include: {
+          user: true,
+          schedule: true,
+          company: true,
+          position: true,
+          workplace: true,
+        },
+      }),
+      this.prisma.scheduleException.count({ where }),
+    ]);
+
+    return {
+      data: data.map((exception) => ({
+        ...exception,
+        exceptionType: toExceptionType(exception.exceptionType),
+        user: exception.user || undefined,
+        workplace: exception.workplace || undefined,
+        position: exception.position || undefined,
+        company: exception.company || undefined,
+        schedule: exception.schedule || undefined,
+      })),
+      total,
+      page,
+      limit,
+    };
   }
 
   async updateScheduleException(
     id: string,
     data: UpdateScheduleExceptionDTO
   ): Promise<ScheduleExceptionResponse> {
-    const { date, checkIn, checkOut, isDayOff, reason } = data;
+    try {
+      // Calcular la duración en días si se actualizan las fechas
+      let durationDays: number | undefined;
+      if (data.startDate && data.endDate) {
+        durationDays = differenceInDays(data.endDate, data.startDate) + 1;
+      }
 
-    const updateData: any = {};
-    if (date) updateData.date = new Date(date);
-    if (checkIn !== undefined)
-      updateData.checkIn = checkIn ? new Date(checkIn) : null;
-    if (checkOut !== undefined)
-      updateData.checkOut = checkOut ? new Date(checkOut) : null;
-    if (isDayOff !== undefined) updateData.isDayOff = isDayOff;
-    if (reason) updateData.reason = reason;
+      // Actualizar la excepción
+      const exception = await this.prisma.scheduleException.update({
+        where: { id },
+        data: {
+          scheduleId: data.scheduleId,
+          userId: data.userId,
+          workplaceId: data.workplaceId,
+          positionId: data.positionId,
+          companyId: data.companyId,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          durationDays: durationDays,
+          isDayOff: data.isDayOff,
+          checkIn: data.isDayOff === false ? data.checkIn : undefined,
+          checkOut: data.isDayOff === false ? data.checkOut : undefined,
+          reason: data.reason,
+        },
+        include: {
+          user: true,
+          schedule: true,
+          company: true,
+          position: true,
+          workplace: true,
+        },
+      });
 
-    const scheduleException = await this.prisma.scheduleException.update({
-      where: { id },
-      data: updateData,
-      include: {
-        schedule: true,
-        user: true,
-      },
-    });
-
-    return scheduleException as ScheduleExceptionResponse;
+      return {
+        ...exception,
+        exceptionType: toExceptionType(exception.exceptionType),
+        user: exception.user || undefined,
+        workplace: exception.workplace || undefined,
+        position: exception.position || undefined,
+        company: exception.company || undefined,
+        schedule: exception.schedule || undefined,
+      };
+    } catch (error: any) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError) {
+        if (error.code === "P2002") {
+          throw new AppError(
+            "Ya existe una excepción registrada para este período y entidad.",
+            400
+          );
+        }
+      }
+      throw new AppError(
+        `Error al actualizar la excepción: ${error.message}`,
+        500
+      );
+    }
   }
 
-  async deleteScheduleException(id: string): Promise<boolean> {
-    const now = new Date();
+  async deleteScheduleException(id: string): Promise<void> {
     await this.prisma.scheduleException.update({
       where: { id },
-      data: { deletedAt: now },
+      data: { deletedAt: new Date() },
     });
-    return true;
   }
 
   async findScheduleExceptionByDate(
@@ -227,39 +480,5 @@ export class ScheduleExceptionRepository
     });
 
     return scheduleException as ScheduleExceptionResponse | null;
-  }
-
-  async countScheduleExceptions(
-    filters?: ScheduleExceptionFilters
-  ): Promise<number> {
-    const where: any = { deletedAt: null };
-
-    if (filters) {
-      const {
-        scheduleId,
-        userId,
-        workplaceId,
-        positionId,
-        companyId,
-        fromDate,
-        toDate,
-        isDayOff,
-      } = filters;
-
-      if (scheduleId) where.scheduleId = scheduleId;
-      if (userId) where.userId = userId;
-      if (workplaceId) where.workplaceId = workplaceId;
-      if (positionId) where.positionId = positionId;
-      if (companyId) where.companyId = companyId;
-      if (isDayOff !== undefined) where.isDayOff = isDayOff;
-
-      if (fromDate || toDate) {
-        where.date = {};
-        if (fromDate) where.date.gte = new Date(fromDate);
-        if (toDate) where.date.lte = new Date(toDate);
-      }
-    }
-
-    return await this.prisma.scheduleException.count({ where });
   }
 }

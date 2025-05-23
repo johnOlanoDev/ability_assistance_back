@@ -1,672 +1,873 @@
 // src/modules/scheduleException/application/scheduleExceptionService.ts
-
-import { injectable, inject } from "tsyringe";
+import { inject, injectable } from "tsyringe";
 import {
   CreateScheduleExceptionDTO,
+  ExceptionType,
   ScheduleExceptionFilters,
   ScheduleExceptionResponse,
   UpdateScheduleExceptionDTO,
 } from "../types/scheduleException.types";
-import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { AppError } from "@/middleware/errors/AppError";
-import { ScheduleValidator } from "@/modules/schedule/Schedule/validator/schedule.validator";
 import { ScheduleExceptionRepository } from "../repository/scheduleException.repository";
+import { ScheduleExceptionValidator } from "../validator/scheduleException.validator";
+import { PermissionUtils } from "@/utils/helper/permissions.helper";
 import { UserRepository } from "@/modules/users/repository/user.repository";
-import { CompanyRepository } from "@/modules/companies/repository/company.repository";
-
-// Lista de feriados nacionales de Perú
-interface Holiday {
-  date: string; // Formato MM-DD (sin año)
-  description: string;
-  isRecurring: boolean; // Si se repite todos los años
-  specificYear?: number; // Para feriados de un año específico
-}
+import { WorkplaceRepository } from "@/modules/workplace/repository/workplace.repository";
+import { PositionRepository } from "@/modules/position/repository/position.repository";
+import { AttendanceRepository } from "@/modules/attendance/repository/attendance.repository";
+import { AsistentType } from "@prisma/client";
+import { startOfDay } from "date-fns";
+import { ScheduleRepository } from "../../Schedule/repository/schedule.repository";
+import { UserResponse } from "@/modules/users/types/user.types";
 
 @injectable()
 export class ScheduleExceptionService {
-  // Lista de feriados nacionales de Perú
-  private peruvianHolidays: Holiday[] = [
-    { date: "01-01", description: "Año Nuevo", isRecurring: true },
-    { date: "04-18", description: "Jueves Santo", isRecurring: true }, // Fecha aproximada, varía cada año
-    { date: "04-19", description: "Viernes Santo", isRecurring: true }, // Fecha aproximada, varía cada año
-    { date: "05-01", description: "Día del Trabajo", isRecurring: true },
-    { date: "06-29", description: "San Pedro y San Pablo", isRecurring: true },
-    { date: "07-28", description: "Fiestas Patrias", isRecurring: true },
-    { date: "07-29", description: "Fiestas Patrias", isRecurring: true },
-    { date: "08-30", description: "Santa Rosa de Lima", isRecurring: true },
-    { date: "10-08", description: "Combate de Angamos", isRecurring: true },
-    { date: "11-01", description: "Todos los Santos", isRecurring: true },
-    { date: "12-08", description: "Inmaculada Concepción", isRecurring: true },
-    { date: "12-25", description: "Navidad", isRecurring: true },
-    // Puedes agregar más feriados específicos con años
-  ];
-
   constructor(
     @inject("ScheduleExceptionRepository")
     private scheduleExceptionRepository: ScheduleExceptionRepository,
-    @inject("ScheduleValidator")
-    private scheduleValidator: ScheduleValidator,
+    @inject("AttendanceRepository")
+    private attendanceRepository: AttendanceRepository,
+    @inject("PermissionUtils")
+    private permissionUtils: PermissionUtils,
     @inject("UserRepository")
     private userRepository: UserRepository,
-    @inject("CompanyRepository")
-    private companyRepository: CompanyRepository,
-    @inject("PermissionUtils")
-    private permissionUtils: PermissionUtils
+    @inject("WorkplaceRepository")
+    private workplaceRepository: WorkplaceRepository,
+    @inject("PositionRepository")
+    private positionRepository: PositionRepository,
+    @inject("ScheduleRepository")
+    private scheduleRepository: ScheduleRepository,
+    @inject("ScheduleExceptionValidator")
+    private validator: ScheduleExceptionValidator
   ) {}
 
   /**
-   * Crear una nueva excepción de horario
+   * Crea una nueva excepción de horario
    */
   async createScheduleException(
-    exceptionData: CreateScheduleExceptionDTO,
+    data: CreateScheduleExceptionDTO,
     user: { userId: string; roleId: string; companyId?: string }
   ): Promise<ScheduleExceptionResponse> {
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    let companyId = isSuperAdmin ? undefined : user.companyId;
-
-    // 👉 Validaciones sólo si NO es SuperAdmin
-    if (!isSuperAdmin) {
-      // Validamos si la excepción aplica a un schedule específico
-      if (exceptionData.scheduleId) {
-        await this.scheduleValidator.validateScheduleExists(
-          user,
-          exceptionData.workplaceId || undefined,
-          exceptionData.positionId || undefined
-        );
-      }
-
-      // Validamos si la excepción aplica a un workplace
-      if (exceptionData.workplaceId) {
-        await Promise.all([
-          this.scheduleValidator.validateWorkplaceExists(
-            user,
-            exceptionData.workplaceId
-          ),
-          this.scheduleValidator.validateWorkplaceActive(
-            user,
-            exceptionData.workplaceId
-          ),
-          this.scheduleValidator.validateWorkplaceAndPositionBelongToCompany(
-            user,
-            exceptionData.workplaceId,
-            companyId
-          ),
-        ]);
-      }
-
-      // Validamos si la excepción aplica a un position
-      if (exceptionData.positionId) {
-        await Promise.all([
-          this.scheduleValidator.validatePositionExists(
-            user,
-            exceptionData.positionId
-          ),
-          this.scheduleValidator.validatePositionActive(
-            user,
-            exceptionData.positionId
-          ),
-          this.scheduleValidator.validatePositionBelongsToCompany(
-            user,
-            exceptionData.positionId,
-            companyId
-          ),
-        ]);
-      }
-
-      // Validamos si la excepción aplica a un usuario específico
-      if (exceptionData.userId) {
-        const userExists = await this.userRepository.getUserById(
-          exceptionData.userId
-        );
-        if (!userExists) {
-          throw new AppError("El usuario no existe", 404);
-        }
-
-        // Validar que el usuario pertenece a la misma empresa
-        if (userExists.companyId !== companyId) {
-          throw new AppError("El usuario no pertenece a tu empresa", 400);
-        }
-      }
-    }
-
     try {
-      // Verificar si ya existe una excepción para la misma entidad en la misma fecha
-      const existingException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          exceptionData.date,
-          exceptionData.userId || undefined,
-          exceptionData.scheduleId || undefined,
-          exceptionData.workplaceId || undefined,
-          exceptionData.positionId || undefined,
-          companyId
+      // Verificar si el usuario es superadmin
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      console.log("🚀 data:", data);
+
+      // Validaciones según el tipo de excepción
+      await this.validateExceptionData(data);
+
+      // Validar fechas
+      this.validateDates(data.startDate, data.endDate);
+
+      const isDateRange =
+        data.startDate &&
+        data.endDate &&
+        !this.isSameDay(data.startDate, data.endDate);
+
+      // Validar horarios si no es día completo libre
+      if (!data.isDayOff && !isDateRange) {
+        if (!data.checkIn || !data.checkOut) {
+          throw new AppError(
+            "Las horas de entrada y salida son obligatorias cuando no es día completo libre.",
+            400
+          );
+        }
+        this.validator.validateTimeFormat(data.checkIn);
+        this.validator.validateTimeFormat(data.checkOut);
+        this.validator.validateCheckInCheckOut(data.checkIn, data.checkOut);
+      }
+
+      // Determinar ID de la entidad afectada y validar acceso
+      let entityId: string;
+      let companyIdFromEntity: string | undefined;
+
+      switch (data.exceptionType) {
+        case ExceptionType.INDIVIDUAL:
+          entityId = data.userId!;
+          if (!isSuperAdmin) {
+            const userEntity = await this.userRepository.getUserById(entityId);
+            if (!userEntity || userEntity.companyId !== user.companyId) {
+              throw new AppError("El usuario no pertenece a tu compañía.", 403);
+            }
+            companyIdFromEntity = userEntity.companyId;
+          }
+          break;
+
+        case ExceptionType.WORKPLACE:
+          entityId = data.workplaceId!;
+          if (!isSuperAdmin) {
+            const workplace = await this.workplaceRepository.getWorkPlaceById(
+              entityId
+            );
+            if (!workplace || workplace.companyId !== user.companyId) {
+              throw new AppError(
+                "El área de trabajo no pertenece a tu compañía.",
+                403
+              );
+            }
+            companyIdFromEntity = workplace.companyId;
+          }
+          break;
+
+        case ExceptionType.POSITION:
+          entityId = data.positionId!;
+          if (!isSuperAdmin) {
+            const position = await this.positionRepository.getPositionById(
+              entityId
+            );
+            if (!position || position.companyId !== user.companyId) {
+              throw new AppError("El cargo no pertenece a tu compañía.", 403);
+            }
+            companyIdFromEntity = position.companyId;
+          }
+          break;
+
+        case ExceptionType.COMPANY:
+          entityId = data.companyId!;
+          if (!isSuperAdmin && entityId !== user.companyId) {
+            throw new AppError(
+              "No puedes crear excepciones para otra compañía.",
+              403
+            );
+          }
+          companyIdFromEntity = entityId;
+          break;
+
+        case ExceptionType.HOLIDAY:
+          entityId = data.companyId!;
+          if (!isSuperAdmin && entityId !== user.companyId) {
+            throw new AppError(
+              "No puedes crear feriados para otra compañía.",
+              403
+            );
+          }
+          companyIdFromEntity = entityId;
+          break;
+
+        default:
+          throw new AppError("Tipo de excepción no válido.", 400);
+      }
+
+      // Usamos la companyId correcta (del usuario o de la entidad)
+      const companyId = isSuperAdmin
+        ? companyIdFromEntity ?? data.companyId
+        : user.companyId;
+
+      // Aseguramos que companyId esté definida
+      if (!companyId) {
+        throw new AppError("No se pudo determinar la compañía asociada.", 400);
+      }
+
+      // Sobreescribimos companyId en data
+      data.companyId = companyId;
+
+      // Verificar solapamientos
+      const overlappingExceptions =
+        await this.scheduleExceptionRepository.findOverlappingExceptions(
+          data.exceptionType,
+          entityId,
+          data.startDate,
+          data.endDate
         );
 
-      if (existingException) {
+      if (overlappingExceptions.length > 0) {
         throw new AppError(
-          "Ya existe una excepción para esta fecha y entidad",
+          "Ya existe una excepción para esta entidad en el período seleccionado.",
           400
         );
       }
 
-      const exceptionToCreate = {
-        ...exceptionData,
-        companyId: companyId || undefined,
-        date: new Date(exceptionData.date),
-        checkIn: exceptionData.checkIn,
-        checkOut: exceptionData.checkOut,
-        isDayOff: exceptionData.isDayOff ?? false,
-      };
+      const { assistanceType, ...exceptionData } = data;
 
-      const newException =
+      const createdException =
         await this.scheduleExceptionRepository.createScheduleException(
-          exceptionToCreate
+          exceptionData
         );
 
-      if (!newException) {
-        throw new AppError("Error al crear la excepción de horario", 500);
+      if (assistanceType) {
+        console.log(
+          "🕒 Creando registros de asistencia con tipo:",
+          assistanceType
+        );
+
+        // Verificar que el tipo de asistencia sea válido
+        const validAssistanceTypes = Object.values(AsistentType);
+        if (validAssistanceTypes.includes(assistanceType)) {
+          await this.createDefaultAttendanceRecordsForException(
+            data, // Pasamos los datos completos (incluye assistanceType)
+            assistanceType
+          );
+          console.log("✅ Registros de asistencia creados exitosamente");
+        } else {
+          console.warn("⚠️ Tipo de asistencia no válido:", assistanceType);
+          console.warn("Tipos válidos:", validAssistanceTypes);
+        }
+      } else {
+        console.log(
+          "ℹ️ No se crearon registros de asistencia (assistanceType no proporcionado)"
+        );
       }
 
-      return newException;
+      return createdException;
+    } catch (error: any) {
+      if (error instanceof AppError) {
+        throw error;
+      }
+      throw new AppError(`Error al crear excepción: ${error.message}`, 500);
+    }
+  }
+
+  async createDefaultAttendanceRecordsForException(
+    exception: CreateScheduleExceptionDTO,
+    assistanceType: AsistentType
+  ): Promise<void> {
+    try {
+      // Determinar el ID de la entidad target
+      let targetId: string;
+      switch (exception.exceptionType) {
+        case ExceptionType.INDIVIDUAL:
+          targetId = exception.userId!;
+          break;
+        case ExceptionType.WORKPLACE:
+          targetId = exception.workplaceId!;
+          break;
+        case ExceptionType.POSITION:
+          targetId = exception.positionId!;
+          break;
+        case ExceptionType.COMPANY:
+        case ExceptionType.HOLIDAY:
+          targetId = exception.companyId!;
+          break;
+        default:
+          throw new Error(
+            `Tipo de excepción no soportado: ${exception.exceptionType}`
+          );
+      }
+
+      console.log("🎯 Target ID:", targetId);
+
+      // Obtener usuarios afectados
+      const usersAffected = await this.userRepository.findUsersByTarget(
+        exception.exceptionType,
+        targetId
+      );
+
+      console.log("👥 Usuarios afectados:", usersAffected.length);
+
+      if (usersAffected.length === 0) {
+        console.warn("⚠️ No se encontraron usuarios afectados");
+        return;
+      }
+
+      // Procesar cada usuario
+      for (const user of usersAffected) {
+        console.log(`👤 Procesando usuario: ${user.name} (${user.id})`);
+
+        let currentDate = new Date(exception.startDate);
+        const endDate = new Date(exception.endDate ?? exception.startDate);
+
+        console.log(
+          `📅 Período: ${currentDate.toISOString().split("T")[0]} a ${
+            endDate.toISOString().split("T")[0]
+          }`
+        );
+
+        while (currentDate <= endDate) {
+          const dateForRecord = new Date(currentDate);
+          console.log(
+            `📅 Procesando fecha: ${dateForRecord.toISOString().split("T")[0]}`
+          );
+
+          // Verificar si ya existe un registro para esta fecha y usuario
+          const existingRecord = await this.attendanceRepository.findAttendance(
+            {
+              userId: user.id,
+              date: startOfDay(dateForRecord),
+            }
+          );
+
+          if (!existingRecord) {
+            console.log("➕ Creando nuevo registro de asistencia");
+
+            // Crear nuevo registro
+            const attendanceData = {
+              userId: user.id,
+              companyId: user.companyId,
+              scheduleId: exception.scheduleId ?? null,
+              checkIn: exception.isDayOff
+                ? null
+                : exception.checkIn?.trim() || null,
+              checkOut: exception.isDayOff
+                ? null
+                : exception.checkOut?.trim() || null,
+              typeAssistanceId: assistanceType,
+              date: startOfDay(dateForRecord),
+              description: exception.reason || "Ausencia programada",
+              notes: `Generado automáticamente por excepción de horario`,
+            };
+
+            const typesWithoutCheckInOut: AsistentType[] = [
+              AsistentType.VACATION,
+              AsistentType.MEDICAL_LEAVE,
+              AsistentType.JUSTIFIED_ABSENCE,
+              AsistentType.INJUSTIFIED_ABSENCE,
+              AsistentType.ABSENT,
+            ];
+
+            // Validación para días completos y por ausencia
+            const isTypeWithoutCheckInOut = typesWithoutCheckInOut.includes(
+              assistanceType as AsistentType
+            );
+
+            // Si no es día libre y el tipo sí requiere horas, valida que tenga checkIn o checkOut
+            if (!exception.isDayOff && !isTypeWithoutCheckInOut) {
+              if (!attendanceData.checkIn && !attendanceData.checkOut) {
+                throw new AppError(
+                  "El registro debe tener al menos checkIn o checkOut",
+                  400
+                );
+              }
+            }
+            await this.attendanceRepository.createReportAttendance(
+              attendanceData
+            );
+            console.log("✅ Registro creado exitosamente");
+          } else {
+            console.log("🔄 Actualizando registro existente");
+
+            // Actualizar registro existente
+            await this.attendanceRepository.updateReportAttendance(
+              existingRecord.id,
+              {
+                typeAssistanceId: assistanceType,
+                checkIn: exception.isDayOff ? null : exception.checkIn,
+                checkOut: exception.isDayOff ? null : exception.checkOut,
+                description: exception.reason || "Ausencia programada",
+                notes: "Actualizado por excepción de horario",
+              }
+            );
+            console.log("✅ Registro actualizado exitosamente");
+          }
+
+          // Avanzar al siguiente día
+          currentDate.setDate(currentDate.getDate() + 1);
+        }
+      }
+
+      console.log("🎉 Proceso completado exitosamente");
+    } catch (error: any) {
+      console.error("❌ Error creando registros de asistencia:", error);
+      throw new AppError(
+        `Error al crear registros de asistencia: ${error.message}`,
+        500
+      );
+    }
+  }
+
+  async findUsersByTarget(
+    id: string,
+    user: { userId: string; roleId: string; companyId?: string }
+  ): Promise<{
+    exception: ScheduleExceptionResponse;
+    usersAffected: UserResponse[];
+  }> {
+    try {
+      const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+
+      const exception =
+        await this.scheduleExceptionRepository.findScheduleExceptionById(id);
+      if (!exception) {
+        throw new AppError("La excepción de horario no existe.", 404);
+      }
+
+      let targetId: string;
+
+      console.log("🚀 Tipo de excepción:", exception.exceptionType);
+
+      switch (exception.exceptionType) {
+        case ExceptionType.INDIVIDUAL:
+          targetId = exception.userId!;
+          break;
+        case ExceptionType.WORKPLACE:
+          targetId = exception.workplaceId!;
+          break;
+        case ExceptionType.POSITION:
+          targetId = exception.positionId!;
+          break;
+        case ExceptionType.COMPANY:
+        case ExceptionType.HOLIDAY:
+          targetId = exception.companyId!;
+          break;
+        default:
+          throw new AppError("Tipo de excepción no válido.", 400);
+      }
+
+      const usersAffected = await this.scheduleExceptionRepository.findUsersByTarget(
+        exception.exceptionType,
+        targetId,
+        isSuperAdmin ? undefined : user.companyId
+      );
+
+      const usersMapped = usersAffected.map((user) => ({
+        ...user,
+        workplace: user.workplace || undefined,
+        position: user.position || undefined,
+        company: user.company || undefined,
+      }));
+
+      return {
+        exception,
+        usersAffected: usersMapped,
+      };
     } catch (error: any) {
       if (error instanceof AppError) {
         throw error;
       }
       throw new AppError(
-        `Error al crear la excepción de horario: ${error.message}`,
+        `Error al buscar usuarios afectados: ${error.message}`,
         500
       );
     }
   }
 
   /**
-   * Actualizar una excepción de horario existente
+   * Actualiza una excepción de horario existente
    */
   async updateScheduleException(
-    id: string,
-    exceptionData: UpdateScheduleExceptionDTO,
-    user: { roleId: string; companyId?: string }
+    data: UpdateScheduleExceptionDTO
   ): Promise<ScheduleExceptionResponse> {
+    // Verificar que la excepción existe
     const existingException =
-      await this.scheduleExceptionRepository.findScheduleExceptionById(id);
+      await this.scheduleExceptionRepository.findScheduleExceptionById(data.id);
+
     if (!existingException) {
-      throw new AppError("Excepción de horario no encontrada", 404);
+      throw new AppError("La excepción de horario no existe.", 404);
     }
 
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-    let companyId: string | undefined = undefined;
+    // Determinar el tipo de excepción actual
+    const currentExceptionType = this.determineExceptionType(existingException);
 
-    if (isSuperAdmin) {
-      companyId =
-        exceptionData.companyId || existingException.companyId || undefined;
-    } else {
-      if (!user.companyId) {
-        throw new AppError("No tienes una empresa asignada", 401);
-      }
-      companyId = user.companyId;
+    // Validar las entidades relacionadas según corresponda
+    await this.validateUpdateExceptionData(data, existingException);
 
-      // Verificar que la excepción pertenece a la empresa del usuario
-      if (
-        existingException.companyId &&
-        existingException.companyId !== companyId
-      ) {
+    // Validar fechas si se proporcionan
+    if (data.startDate && data.endDate) {
+      this.validateDates(data.startDate, data.endDate);
+    } else if (data.startDate && !data.endDate) {
+      this.validateDates(data.startDate, existingException.endDate);
+    } else if (!data.startDate && data.endDate) {
+      this.validateDates(existingException.startDate, data.endDate);
+    }
+
+    // Validar horarios si no es día completo libre
+    const isDayOff =
+      data.isDayOff !== undefined ? data.isDayOff : existingException.isDayOff;
+    if (!isDayOff) {
+      const checkIn = data.checkIn || existingException.checkIn;
+      const checkOut = data.checkOut || existingException.checkOut;
+
+      if (!checkIn || !checkOut) {
         throw new AppError(
-          "No tienes permiso para actualizar esta excepción",
-          403
+          "Las horas de entrada y salida son obligatorias cuando no es día completo libre.",
+          400
         );
       }
+
+      this.validator.validateTimeFormat(checkIn);
+      this.validator.validateTimeFormat(checkOut);
+      this.validator.validateCheckInCheckOut(checkIn, checkOut);
     }
 
-    try {
-      const updatedData: UpdateScheduleExceptionDTO = {
-        ...exceptionData,
-      };
+    // Verificar solapamientos con otras excepciones
+    let entityId: string;
+    let exceptionType: ExceptionType;
 
-      if (exceptionData.date) {
-        updatedData.date = new Date(exceptionData.date);
-      }
-
-      if (exceptionData.checkIn !== undefined) {
-        updatedData.checkIn = exceptionData.checkIn;
-      }
-
-      if (exceptionData.checkOut !== undefined) {
-        updatedData.checkOut = exceptionData.checkOut;
-      }
-
-      const updatedException =
-        await this.scheduleExceptionRepository.updateScheduleException(
-          id,
-          updatedData
-        );
-
-      return updatedException;
-    } catch (error: any) {
-      throw new AppError(
-        `Error al actualizar la excepción: ${error.message}`,
-        500
+    if (data.userId !== undefined) {
+      entityId = data.userId;
+      exceptionType = ExceptionType.INDIVIDUAL;
+    } else if (data.workplaceId !== undefined) {
+      entityId = data.workplaceId;
+      exceptionType = ExceptionType.WORKPLACE;
+    } else if (data.positionId !== undefined) {
+      entityId = data.positionId;
+      exceptionType = ExceptionType.POSITION;
+    } else if (data.companyId !== undefined) {
+      entityId = data.companyId;
+      exceptionType = ExceptionType.COMPANY;
+    } else {
+      // Si no se cambia la entidad, usar los valores existentes
+      exceptionType = currentExceptionType;
+      entityId = this.getEntityIdByType(
+        existingException,
+        currentExceptionType
       );
     }
+
+    const startDate = data.startDate || existingException.startDate;
+    const endDate = data.endDate || existingException.endDate;
+
+    const overlappingExceptions =
+      await this.scheduleExceptionRepository.findOverlappingExceptions(
+        exceptionType,
+        entityId,
+        startDate,
+        endDate,
+        data.id // Excluir la excepción actual
+      );
+
+    if (overlappingExceptions.length > 0) {
+      throw new AppError(
+        "Ya existe una excepción para esta entidad en el período seleccionado.",
+        400
+      );
+    }
+
+    // Actualizar la excepción
+    return this.scheduleExceptionRepository.updateScheduleException(
+      data.id,
+      data
+    );
   }
 
   /**
-   * Eliminar una excepción de horario
+   * Elimina lógicamente una excepción de horario
    */
-  async deleteScheduleException(
-    id: string,
-    user: { roleId: string; companyId?: string }
-  ): Promise<boolean> {
-    const existingException =
-      await this.scheduleExceptionRepository.findScheduleExceptionById(id);
-    if (!existingException) {
-      throw new AppError("Excepción de horario no encontrada", 404);
-    }
-
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-
-    if (!isSuperAdmin && existingException.companyId !== user.companyId) {
-      throw new AppError("No tienes permiso para eliminar esta excepción", 403);
-    }
-
-    try {
-      return await this.scheduleExceptionRepository.deleteScheduleException(id);
-    } catch (error: any) {
-      throw new AppError(
-        `Error al eliminar la excepción: ${error.message}`,
-        500
-      );
-    }
-  }
-
-  /**
-   * Obtener una excepción de horario por su ID
-   */
-  async getScheduleExceptionById(
-    id: string,
-    user: { roleId: string; companyId?: string }
-  ): Promise<ScheduleExceptionResponse> {
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-
+  async deleteScheduleException(id: string): Promise<void> {
+    // Verificar que la excepción existe
     const exception =
       await this.scheduleExceptionRepository.findScheduleExceptionById(id);
     if (!exception) {
-      throw new AppError("Excepción de horario no encontrada", 404);
+      throw new AppError("La excepción de horario no existe.", 404);
     }
 
-    // Si no es superadmin, verificar que la excepción pertenece a su empresa
-    if (
-      !isSuperAdmin &&
-      exception.companyId &&
-      exception.companyId !== user.companyId
-    ) {
-      throw new AppError("No tienes permiso para ver esta excepción", 403);
-    }
+    await this.scheduleExceptionRepository.deleteScheduleException(id);
+  }
 
+  /**
+   * Busca una excepción de horario por su ID
+   */
+  async findScheduleExceptionById(
+    id: string
+  ): Promise<ScheduleExceptionResponse> {
+    const exception =
+      await this.scheduleExceptionRepository.findScheduleExceptionById(id);
+    if (!exception) {
+      throw new AppError("La excepción de horario no existe.", 404);
+    }
     return exception;
   }
 
   /**
-   * Obtener excepciones de horario según filtros
+   * Busca excepciones de horario según filtros
    */
-  async getScheduleExceptions(
+  async findScheduleExceptions(
     filters: ScheduleExceptionFilters,
-    user: { roleId: string; companyId?: string }
-  ): Promise<{ exceptions: ScheduleExceptionResponse[]; total: number }> {
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-
-    // Si no es superadmin, asegurarse que solo vea excepciones de su empresa
-    if (!isSuperAdmin) {
-      if (!user.companyId) {
-        throw new AppError("No tienes una empresa asignada", 401);
-      }
-      filters.companyId = user.companyId;
-    }
-
-    const exceptions =
-      await this.scheduleExceptionRepository.findScheduleExceptionsByFilters(
-        filters
-      );
-    const total =
-      await this.scheduleExceptionRepository.countScheduleExceptions(filters);
-
-    return { exceptions, total };
-  }
-
-  /**
-   * Configurar automáticamente los feriados nacionales para un año específico
-   */
-  async configureNationalHolidays(
-    year: number,
-    user: { roleId: string; companyId?: string },
-    companyId?: string
-  ): Promise<{ created: number; skipped: number }> {
-    const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-
-    // Validar permisos
-    if (!isSuperAdmin && !user.companyId) {
-      throw new AppError("No tienes permiso para configurar feriados", 403);
-    }
-
-    let created = 0;
-    let skipped = 0;
-
-    try {
-      // Procesar cada feriado
-      for (const holiday of this.peruvianHolidays) {
-        // Saltear si es un feriado de año específico que no corresponde
-        if (!holiday.isRecurring && holiday.specificYear !== year) {
-          continue;
-        }
-
-        // Fecha del feriado para el año especificado
-        const [month, day] = holiday.date.split("-");
-        const holidayDate = new Date(year, parseInt(month) - 1, parseInt(day));
-
-        // Determinar el nivel y entidad automáticamente
-        let companyId = undefined;
-        let workplaceId = undefined;
-        let positionId = undefined;
-        let scheduleId = undefined;
-        let userId = undefined;
-
-        if (isSuperAdmin) {
-          // Si es superadmin, puede crear feriados globales o por empresa
-          companyId = user.companyId || undefined;
-        } else {
-          // Si no es superadmin, verifica el nivel más bajo posible
-          const userRecord = await this.userRepository.getUserById(
-            user.companyId || ""
-          );
-          if (userRecord) {
-            companyId = userRecord.companyId;
-            workplaceId = userRecord.workplaceId || undefined;
-            positionId = userRecord.positionId || undefined;
-          }
-        }
-
-        // Verificar si ya existe una excepción para esta fecha y nivel
-        const existingException =
-          await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-            holidayDate,
-            userId,
-            scheduleId,
-            workplaceId,
-            positionId,
-            companyId
-          );
-
-        if (existingException) {
-          skipped++;
-          continue;
-        }
-
-        // Crear la excepción para el feriado
-        await this.scheduleExceptionRepository.createScheduleException({
-          companyId: companyId,
-          workplaceId: workplaceId,
-          positionId: positionId,
-          scheduleId: scheduleId,
-          userId: userId,
-          date: holidayDate,
-          isDayOff: true,
-          reason: `Feriado Nacional: ${holiday.description}`,
-        });
-
-        created++;
-      }
-
-      return { created, skipped };
-    } catch (error: any) {
-      throw new AppError(
-        `Error al configurar feriados nacionales: ${error.message}`,
-        500
-      );
-    }
-  }
-
-  /**
-   * Verificar si una fecha es un día no laborable (excepción)
-   * Verifica en todos los niveles aplicables
-   */
-  async isDateDayOff(
-    date: Date | string,
-    userId: string,
-    scheduleId?: string
-  ): Promise<{ isDayOff: boolean; reason?: string }> {
-    const dateObj = new Date(date);
-    const user = await this.userRepository.getUserById(userId);
-
-    if (!user) {
-      throw new AppError("Usuario no encontrado", 404);
-    }
-
-    const companyId = user.companyId;
-    const workplaceId = user.workplaceId;
-    const positionId = user.positionId;
-
-    // Prioridad de verificación:
-    // 1. Excepción específica para el usuario
-    const userException =
-      await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-        dateObj,
-        userId
-      );
-
-    if (userException?.isDayOff) {
-      return { isDayOff: true, reason: userException.reason };
-    }
-
-    // 2. Excepción para el horario específico
-    if (scheduleId) {
-      const scheduleException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          scheduleId
-        );
-
-      if (scheduleException?.isDayOff) {
-        return { isDayOff: true, reason: scheduleException.reason };
-      }
-    }
-
-    // 3. Excepción para la posición
-    if (positionId) {
-      const positionException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          undefined,
-          positionId
-        );
-
-      if (positionException?.isDayOff) {
-        return { isDayOff: true, reason: positionException.reason };
-      }
-    }
-
-    // 4. Excepción para el área/workplace
-    if (workplaceId) {
-      const workplaceException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          workplaceId
-        );
-
-      if (workplaceException?.isDayOff) {
-        return { isDayOff: true, reason: workplaceException.reason };
-      }
-    }
-
-    // 5. Excepción para la empresa
-    if (companyId) {
-      const companyException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          companyId
-        );
-
-      if (companyException?.isDayOff) {
-        return { isDayOff: true, reason: companyException.reason };
-      }
-    }
-
-    // No es un día no laborable
-    return { isDayOff: false };
-  }
-
-  /**
-   * Obtener el horario efectivo para un usuario en una fecha específica
-   * considerando excepciones
-   */
-  async getEffectiveScheduleForDate(
-    userId: string,
-    date: Date | string,
-    scheduleId: string
+    page: number = 1,
+    limit: number = 10
   ): Promise<{
-    checkIn: string | null | undefined;
-    checkOut: string | null | undefined;
-    isDayOff: boolean;
-    reason?: string;
+    data: ScheduleExceptionResponse[];
+    total: number;
+    page: number;
+    limit: number;
   }> {
-    const dateObj = new Date(date);
+    return this.scheduleExceptionRepository.findScheduleExceptions(
+      filters,
+      page,
+      limit
+    );
+  }
 
-    // Primero verificar si es día no laborable
-    const dayOffCheck = await this.isDateDayOff(dateObj, userId, scheduleId);
-    if (dayOffCheck.isDayOff) {
-      return {
-        checkIn: null,
-        checkOut: null,
-        isDayOff: true,
-        reason: dayOffCheck.reason,
-      };
-    }
+  /**
+   * Busca una excepción de horario para una fecha específica
+   */
+  async findScheduleExceptionByDate(
+    date: Date | string,
+    userId?: string,
+    scheduleId?: string,
+    workplaceId?: string,
+    positionId?: string,
+    companyId?: string | null
+  ): Promise<ScheduleExceptionResponse | null> {
+    return this.scheduleExceptionRepository.findScheduleExceptionByDate(
+      date,
+      userId,
+      scheduleId,
+      workplaceId,
+      positionId,
+      companyId
+    );
+  }
 
-    const user = await this.userRepository.getUserById(userId);
-    if (!user) {
-      throw new AppError("Usuario no encontrado", 404);
-    }
+  /**
+   * Crea una excepción de horario para un feriado
+   */
+  async createHolidayException(
+    user: { userId: string; roleId: string; companyId?: string },
+    date: Date,
+    description: string,
+    isDayOff: boolean = true,
+    companyId?: string,
+    checkIn?: string,
+    checkOut?: string
+  ): Promise<ScheduleExceptionResponse> {
+    // Crear un objeto de excepción para el feriado
+    const holidayData: CreateScheduleExceptionDTO = {
+      startDate: date,
+      endDate: date, // Los feriados típicamente son de un día
+      isDayOff,
+      reason: `Feriado: ${description}`,
+      exceptionType: ExceptionType.HOLIDAY,
+      companyId, // Puede ser nulo para feriados nacionales
+      checkIn,
+      checkOut,
+    };
 
-    const companyId = user.companyId;
-    const workplaceId = user.workplaceId;
-    const positionId = user.positionId;
+    // Utilizar el método existente para crear la excepción
+    return this.createScheduleException(holidayData, user);
+  }
 
-    // Prioridad para horarios modificados:
-    // 1. Excepción específica para el usuario
-    const userException =
-      await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-        dateObj,
-        userId
+  /**
+   * Verifica si una fecha dada es un feriado
+   */
+  async isHoliday(date: Date, companyId?: string): Promise<boolean> {
+    // Convertir la fecha a formato ISO string para la comparación
+    const formattedDate = date.toISOString().split("T")[0];
+
+    // Buscar excepciones de tipo HOLIDAY para esta fecha
+    const filters: ScheduleExceptionFilters = {
+      startDateFrom: new Date(formattedDate),
+      startDateTo: new Date(formattedDate),
+      companyId,
+    };
+
+    const { data } = await this.findScheduleExceptions(filters);
+
+    // Filtrar solo las excepciones de tipo HOLIDAY
+    const holidays = data.filter((exception) =>
+      // Asumimos que las excepciones de tipo feriado tienen razones que comienzan con "Feriado:"
+      exception.reason.startsWith("Feriado:")
+    );
+
+    return holidays.length > 0;
+  }
+
+  /**
+   * Obtiene todos los feriados en un rango de fechas
+   */
+  async getHolidays(
+    startDate: Date,
+    endDate: Date,
+    companyId?: string
+  ): Promise<ScheduleExceptionResponse[]> {
+    const filters: ScheduleExceptionFilters = {
+      startDateFrom: startDate,
+      endDateTo: endDate,
+      companyId,
+    };
+
+    const { data } = await this.findScheduleExceptions(filters);
+
+    // Filtrar solo las excepciones de tipo HOLIDAY
+    return data.filter((exception) => exception.reason.startsWith("Feriado:"));
+  }
+
+  /**
+   * Importa feriados desde un archivo CSV o JSON
+   */
+  async importHolidays(
+    user: { userId: string; roleId: string; companyId?: string },
+    holidays: Array<{
+      date: Date;
+      description: string;
+      isDayOff?: boolean;
+      companyId?: string;
+    }>
+  ): Promise<void> {
+    for (const holiday of holidays) {
+      await this.createHolidayException(
+        user,
+        holiday.date,
+        holiday.description,
+        holiday.isDayOff !== undefined ? holiday.isDayOff : true
       );
+    }
+  }
 
-    if (userException && (userException.checkIn || userException.checkOut)) {
-      return {
-        checkIn: userException.checkIn,
-        checkOut: userException.checkOut,
-        isDayOff: userException.isDayOff,
-        reason: userException.reason,
-      };
+  /**
+   * Verifica si hay excepciones solapadas
+   */
+  async checkOverlappingExceptions(
+    exceptionType: ExceptionType,
+    entityId: string,
+    startDate: Date,
+    endDate: Date,
+    excludeExceptionId?: string
+  ): Promise<ScheduleExceptionResponse[]> {
+    return this.scheduleExceptionRepository.findOverlappingExceptions(
+      exceptionType,
+      entityId,
+      startDate,
+      endDate,
+      excludeExceptionId
+    );
+  }
+
+  // Métodos auxiliares privados
+
+  /**
+   * Valida los datos de una excepción según su tipo
+   */
+  private async validateExceptionData(
+    data: CreateScheduleExceptionDTO
+  ): Promise<void> {
+    switch (data.exceptionType) {
+      case ExceptionType.INDIVIDUAL:
+        if (!data.userId) {
+          throw new AppError(
+            "El ID de usuario es obligatorio para excepciones individuales.",
+            400
+          );
+        }
+        await this.validator.validateUserExists(data.userId);
+        break;
+      case ExceptionType.WORKPLACE:
+        if (!data.workplaceId) {
+          throw new AppError(
+            "El ID de área de trabajo es obligatorio para excepciones de área.",
+            400
+          );
+        }
+        await this.validator.validateWorkplaceExists(data.workplaceId);
+        break;
+      case ExceptionType.POSITION:
+        if (!data.positionId) {
+          throw new AppError(
+            "El ID de cargo es obligatorio para excepciones de cargo.",
+            400
+          );
+        }
+        await this.validator.validatePositionExists(data.positionId);
+        break;
+      case ExceptionType.COMPANY:
+        if (!data.companyId) {
+          throw new AppError(
+            "El ID de compañía es obligatorio para excepciones de compañía.",
+            400
+          );
+        }
+        await this.validator.validateCompanyExists(data.companyId);
+        break;
+
+      case ExceptionType.HOLIDAY:
+        // Para feriados, no necesitamos validaciones adicionales específicas
+        // excepto verificar que la razón comience con "Feriado:"
+        if (!data.reason.startsWith("Feriado:")) {
+          data.reason = `Feriado: ${data.reason}`;
+        }
+
+        // Si se proporciona un ID de compañía, validarlo
+        if (data.companyId) {
+          await this.validator.validateCompanyExists(data.companyId);
+        }
+        break;
+      default:
+        throw new AppError("Tipo de excepción no válido.", 400);
     }
 
-    // 2. Excepción para el horario específico
-    const scheduleException =
-      await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-        dateObj,
-        undefined,
-        scheduleId
+    // Validar que el horario exista (si se proporciona)
+    if (data.scheduleId) {
+      await this.validator.validateScheduleExists(data.scheduleId);
+    }
+  }
+
+  /**
+   * Valida los datos para actualización
+   */
+  private async validateUpdateExceptionData(
+    data: UpdateScheduleExceptionDTO,
+    existingException: ScheduleExceptionResponse
+  ): Promise<void> {
+    // Validar entidades si se proporcionan
+    if (data.userId) {
+      await this.validator.validateUserExists(data.userId);
+    }
+    if (data.workplaceId) {
+      await this.validator.validateWorkplaceExists(data.workplaceId);
+    }
+    if (data.positionId) {
+      await this.validator.validatePositionExists(data.positionId);
+    }
+    if (data.companyId) {
+      await this.validator.validateCompanyExists(data.companyId);
+    }
+    if (data.scheduleId) {
+      await this.validator.validateScheduleExists(data.scheduleId);
+    }
+  }
+
+  /**
+   * Valida las fechas de inicio y fin
+   */
+  private validateDates(startDate: Date, endDate: Date): void {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      throw new AppError("Las fechas proporcionadas no son válidas.", 400);
+    }
+
+    if (start > end) {
+      throw new AppError(
+        "La fecha de inicio debe ser anterior o igual a la fecha de fin.",
+        400
       );
-
-    if (
-      scheduleException &&
-      (scheduleException.checkIn || scheduleException.checkOut)
-    ) {
-      return {
-        checkIn: scheduleException.checkIn,
-        checkOut: scheduleException.checkOut,
-        isDayOff: scheduleException.isDayOff,
-        reason: scheduleException.reason,
-      };
     }
+  }
 
-    // 3. Excepción para la posición
-    if (positionId) {
-      const positionException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          undefined,
-          positionId
-        );
+  /**
+   * Determina el tipo de excepción basado en los campos existentes
+   */
+  private determineExceptionType(
+    exception: ScheduleExceptionResponse
+  ): ExceptionType {
+    if (exception.userId) return ExceptionType.INDIVIDUAL;
+    if (exception.workplaceId) return ExceptionType.WORKPLACE;
+    if (exception.positionId) return ExceptionType.POSITION;
+    if (exception.companyId) return ExceptionType.COMPANY;
+    throw new AppError("No se pudo determinar el tipo de excepción.", 500);
+  }
 
-      if (
-        positionException &&
-        (positionException.checkIn || positionException.checkOut)
-      ) {
-        return {
-          checkIn: positionException.checkIn,
-          checkOut: positionException.checkOut,
-          isDayOff: positionException.isDayOff,
-          reason: positionException.reason,
-        };
-      }
+  /**
+   * Obtiene el ID de la entidad según el tipo de excepción
+   */
+  private getEntityIdByType(
+    exception: ScheduleExceptionResponse,
+    type: ExceptionType
+  ): string {
+    switch (type) {
+      case ExceptionType.INDIVIDUAL:
+        return exception.userId!;
+      case ExceptionType.WORKPLACE:
+        return exception.workplaceId!;
+      case ExceptionType.POSITION:
+        return exception.positionId!;
+      case ExceptionType.COMPANY:
+        return exception.companyId!;
+      default:
+        throw new AppError("Tipo de excepción no válido.", 400);
     }
+  }
 
-    // 4. Excepción para el área/workplace
-    if (workplaceId) {
-      const workplaceException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          workplaceId
-        );
+  private isSameDay(date1: Date | string, date2: Date | string): boolean {
+    // Convertir a Date si son strings
+    const d1 = date1 instanceof Date ? date1 : new Date(date1);
+    const d2 = date2 instanceof Date ? date2 : new Date(date2);
 
-      if (
-        workplaceException &&
-        (workplaceException.checkIn || workplaceException.checkOut)
-      ) {
-        return {
-          checkIn: workplaceException.checkIn,
-          checkOut: workplaceException.checkOut,
-          isDayOff: workplaceException.isDayOff,
-          reason: workplaceException.reason,
-        };
-      }
-    }
-
-    // 5. Excepción para la empresa
-    if (companyId) {
-      const companyException =
-        await this.scheduleExceptionRepository.findScheduleExceptionByDate(
-          dateObj,
-          undefined,
-          undefined,
-          undefined,
-          undefined,
-          companyId
-        );
-
-      if (
-        companyException &&
-        (companyException.checkIn || companyException.checkOut)
-      ) {
-        return {
-          checkIn: companyException.checkIn,
-          checkOut: companyException.checkOut,
-          isDayOff: companyException.isDayOff,
-          reason: companyException.reason,
-        };
-      }
-    }
-
-    // Si no hay excepciones, devolvemos null para indicar que se use el horario normal
-    return { checkIn: null, checkOut: null, isDayOff: false };
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
+    );
   }
 }

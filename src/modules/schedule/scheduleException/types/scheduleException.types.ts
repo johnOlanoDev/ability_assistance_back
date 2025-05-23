@@ -1,46 +1,76 @@
 import { UserResponse } from "@/modules/users/types/user.types";
 import { ScheduleResponse } from "../../Schedule/types/schedule.types";
+import { WorkPlacesResponse } from "@/modules/workplace/types/workplace.types";
+import { PositionResponse } from "@/modules/position/types/position.types";
+import { CompanyResponse } from "@/modules/companies/types/company.types";
+import { AsistentType } from "@/modules/attendance/types/attendance.types";
+
+// Enum para los tipos de excepción
+export enum ExceptionType {
+  INDIVIDUAL = "INDIVIDUAL",
+  WORKPLACE = "WORKPLACE",
+  POSITION = "POSITION",
+  COMPANY = "COMPANY",
+  HOLIDAY = "HOLIDAY",
+}
+
 export interface ScheduleExceptionResponse {
-  id: string;
+  id?: string;
   scheduleId?: string | null;
   userId?: string | null;
   workplaceId?: string | null;
   positionId?: string | null;
   companyId?: string | null;
-  date: Date;
+  startDate: Date;
+  endDate: Date;
+  durationDays: number;
+  isDayOff: boolean;
   checkIn?: string | null;
   checkOut?: string | null;
-  isDayOff: boolean;
-  reason?: string;
-  schedule?: ScheduleResponse;
-  user?: UserResponse;
+  reason: string;
   createdAt: Date;
   updatedAt: Date;
+  schedule?: ScheduleResponse;
+  user?: UserResponse;
+  workplace?: WorkPlacesResponse;
+  position?: PositionResponse;
+  company?: CompanyResponse;
   deletedAt?: Date | null;
+
+  exceptionType: ExceptionType;
+  assistanceType?: AsistentType;
+
+}
+
+export interface ScheduleExceptionFilters {
+  userId?: string;
+  workplaceId?: string;
+  positionId?: string;
+  companyId?: string;
+  scheduleId?: string;
+  startDateFrom?: Date;
+  startDateTo?: Date;
+  endDateFrom?: Date;
+  endDateTo?: Date;
 }
 
 export type CreateScheduleExceptionDTO = {
-  scheduleId?: string | null;
-  userId?: string | null;
-  workplaceId?: string | null;
-  positionId?: string | null;
-  companyId?: string | null;
-  date: Date | string;
+  startDate: Date;
+  endDate: Date;
+  isDayOff: boolean;
   checkIn?: string | null;
   checkOut?: string | null;
-  isDayOff?: boolean;
   reason: string;
-};
-
-export type UpdateScheduleExceptionDTO = Partial<CreateScheduleExceptionDTO>;
-
-export type ScheduleExceptionFilters = {
   scheduleId?: string;
   userId?: string;
   workplaceId?: string;
   positionId?: string;
   companyId?: string;
-  fromDate?: Date | string;
-  toDate?: Date | string;
-  isDayOff?: boolean;
+  exceptionType: ExceptionType;
+
+  assistanceType?: AsistentType;
+};
+
+export type UpdateScheduleExceptionDTO = Partial<Omit<CreateScheduleExceptionDTO, 'exceptionType'>> & {
+  id: string;
 };

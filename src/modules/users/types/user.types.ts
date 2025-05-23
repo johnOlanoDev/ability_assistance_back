@@ -2,8 +2,8 @@ import { CompanyResponse } from "@/modules/companies/types/company.types";
 import { DocumentTypeResponse } from "@/modules/documentType/types/documentType.types";
 import { PositionResponse } from "@/modules/position/types/position.types";
 import { WorkPlacesResponse } from "@/modules/workplace/types/workplace.types";
-import { DecimalType } from "@/prisma";
 import { RoleResponse } from "@/modules/roles/types/roles.types";
+import { Decimal } from "@prisma/client/runtime/library";
 
 export interface UserResponse {
   id: string;
@@ -12,7 +12,7 @@ export interface UserResponse {
   email: string;
   numberDocument: string;
   gender: string;
-  salary?: DecimalType | null;
+  salary: Decimal | null;
   birthDate: Date;
   avatarPublicId?: string | null;
   avatarUrl?: string | null;
@@ -41,7 +41,7 @@ export type CreateUserDTO = {
   password: string;
   numberDocument: string;
   gender: Gender;
-  salary?: DecimalType | null;
+  salary: Decimal | null;
   birthDate: Date;
   phoneNumber?: string | null;
   avatarPublicId?: string | null;

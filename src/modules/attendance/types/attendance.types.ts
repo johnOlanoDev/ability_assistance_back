@@ -2,11 +2,10 @@ import { Decimal } from "@prisma/client/runtime/library";
 import { CompanyResponse } from "@/modules/companies/types/company.types";
 import { ScheduleResponse } from "@/modules/schedule/Schedule/types/schedule.types";
 import { UserResponse } from "@/modules/users/types/user.types";
-import { PermissionTypeResponse } from "@/modules/permissionsType/types/permissionTypes.types";
 import { RoleResponse } from "@/modules/roles/types/roles.types";
 
 export interface ReportAttendanceResponse {
-  id?: string;
+  id: string;
   scheduleId: string;
   schedule?: ScheduleResponse | null;
   companyId?: string | null;
@@ -28,8 +27,6 @@ export interface ReportAttendanceResponse {
   description?: string | null;
   userId: string;
   user?: UserResponse | null;
-  typePermissionId?: string;
-  typePermission?: PermissionTypeResponse | null;
   typeAssistanceId?: AsistentType;
   role?: RoleResponse | null;
   status?: boolean;
@@ -63,7 +60,7 @@ export interface AttendanceHistory {
 
 export interface CreateReportAttendance {
   scheduleId?: string | null;
-  date: string;
+  date: Date | string;
   checkIn?: string | null;
   checkOut?: string | null;
   locationLatitude?: Decimal | null;
@@ -75,7 +72,7 @@ export interface CreateReportAttendance {
   description?: string | null;
   userId: string;
   typePermissionId?: string;
-  typeAssistanceId: AsistentType;
+  typeAssistanceId: AsistentType | PermissionType;
   status?: boolean;
   companyId?: string | null;
 }
@@ -86,7 +83,11 @@ export const AsistentType = {
   PRESENT: "PRESENT",
   ABSENT: "ABSENT",
   LATE: "LATE",
-  EARLY_EXIT: "EARLY_EXIT",
+} as const;
+
+export type AsistentType = (typeof AsistentType)[keyof typeof AsistentType];
+
+export const PermissionType = {
   PERMISSION_HOURS: "PERMISSION_HOURS",
   VACATION: "VACATION",
   MEDICAL_LEAVE: "MEDICAL_LEAVE",
@@ -95,4 +96,5 @@ export const AsistentType = {
   OTHER: "OTHER",
 } as const;
 
-export type AsistentType = (typeof AsistentType)[keyof typeof AsistentType];
+export type PermissionType =
+  (typeof PermissionType)[keyof typeof PermissionType];

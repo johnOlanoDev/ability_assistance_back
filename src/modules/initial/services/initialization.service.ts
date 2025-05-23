@@ -1,17 +1,15 @@
-import { inject, injectable } from "tsyringe";
-import { PRISMA_TOKEN, PrismaType } from "@/prisma";
+import { container, inject, injectable } from "tsyringe";
 import bcrypt from "bcryptjs";
 import { AppError } from "@/middleware/errors/AppError";
 import { logger } from "@/logger/logger";
-import {
-  allMenus,
-  menuAssignments,
-  permissions,
-} from "../data/index";
+import { allMenus, menuAssignments, permissions } from "../data/index";
+import { PrismaClient } from "@prisma/client";
 
+const prisma = new PrismaClient();
+container.registerInstance(PrismaClient, prisma);
 @injectable()
 export class InitializationService {
-  constructor(@inject(PRISMA_TOKEN) private prisma: PrismaType) {}
+  constructor(@inject(PrismaClient) private prisma: PrismaClient) {}
 
   async initialize() {
     console.log("Inicializando base de datos...");
@@ -385,7 +383,7 @@ export class InitializationService {
         );
       }
 
-      console.log(userPermissions)
+      console.log(userPermissions);
 
       console.log("Asignación de permisos completada.");
     } catch (error: any) {
@@ -597,9 +595,6 @@ export class InitializationService {
               menuId: existingMenu.id,
             },
           });
-
-          console.log(`Menú asignado al rol con ID: ${roleId}`);
-          logger.info(`Menú asignado al rol con ID: ${roleId}`);
         } else {
           console.log(`El menú ya está asignado al rol con ID: ${roleId}`);
           logger.info(`El menú ya está asignado al rol con ID: ${roleId}`);

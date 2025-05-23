@@ -30,12 +30,10 @@ export class DashboardService {
     positionName?: string
   ) {
     try {
-      // 1. Determinar si es superadmin
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
       const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
       const isUser = !isSuperAdmin && !isAdmin;
 
-      // 2. Si el usuario no es superadmin, validar que tenga una compañía asignada
       if (!isSuperAdmin && !user.companyId) {
         throw new AppError(
           "Se requiere una compañía para usuarios que no son superadmin",
@@ -43,9 +41,7 @@ export class DashboardService {
         );
       }
 
-      // 3. Determinar el companyId basado en el rol (undefined para superadmin)
       const companyId = isSuperAdmin ? undefined : user.companyId;
-
       const userId = isUser ? user.userId : undefined;
 
       if (isSuperAdmin) {
@@ -159,7 +155,7 @@ export class DashboardService {
   async getRecentAttendanceRecords(
     limit: number = 20,
     user: {
-      userId: string,
+      userId: string;
       roleId: string;
       companyId?: string;
     }
@@ -167,23 +163,22 @@ export class DashboardService {
     try {
       await this.validateCompany(user);
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
-      const isAdmin = await this.permissionUtils.isAdmin(user.roleId)
-      const isUser = !isSuperAdmin && !isAdmin
-
+      const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+      const isUser = !isSuperAdmin && !isAdmin;
 
       if (isSuperAdmin) {
         return this.dashboardRepository.getRecentAttendanceRecords();
-      } else if(isAdmin) {
+      } else if (isAdmin) {
         return this.dashboardRepository.getRecentAttendanceRecords(
           limit,
           user?.companyId
         );
       } else {
-        return (this.dashboardRepository.getRecentAttendanceRecords(
+        return this.dashboardRepository.getRecentAttendanceRecords(
           limit,
           user?.companyId,
           user.userId
-        ))
+        );
       }
     } catch (error) {
       throw new AppError(
@@ -282,6 +277,7 @@ export class DashboardService {
 
   async getLateAttendancesThisMonth(
     user: {
+      userId: string;
       roleId: string;
       companyId?: string;
     },
@@ -291,13 +287,25 @@ export class DashboardService {
     try {
       await this.validateCompany(user);
       const isSuperAdmin = await this.permissionUtils.isSuperAdmin(user.roleId);
+      const isAdmin = await this.permissionUtils.isAdmin(user.roleId);
+      const isUser = !isSuperAdmin && !isAdmin;
 
       const range = getDateRange(filterRange, customRange);
 
-      return this.dashboardRepository.getLateAttendancesThisMonth(
-        range,
-        isSuperAdmin ? undefined : user.companyId
-      );
+      if (isUser) {
+        return this.dashboardRepository.getLateAttendancesThisMonth(
+          range,
+          user.companyId,
+          user.userId
+        );
+      } else if (isAdmin) {
+        return this.dashboardRepository.getLateAttendancesThisMonth(
+          range,
+          user.companyId
+        );
+      }
+
+      return this.dashboardRepository.getLateAttendancesThisMonth(range);
     } catch (error) {
       throw new AppError("Error al obtener asistencias tardías", 500);
     }

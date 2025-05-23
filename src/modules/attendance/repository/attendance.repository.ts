@@ -9,60 +9,8 @@ import {
   ReportAttendanceResponse,
   UpdateReportAttendance,
 } from "../types/attendance.types";
-import dayjs from "dayjs";
-
-const extractTime = (timestamp: string | Date | null): string => {
-  if (!timestamp) return ""; // Si el valor es nulo, retornar una cadena vacía
-  try {
-    const date =
-      typeof timestamp === "string" ? new Date(timestamp) : timestamp;
-    if (isNaN(date.getTime())) return ""; // Validar que sea una fecha válida
-    const hours = String(date.getUTCHours()).padStart(2, "0");
-    const minutes = String(date.getUTCMinutes()).padStart(2, "0");
-    const seconds = String(date.getUTCSeconds()).padStart(2, "0");
-    return `${hours}:${minutes}:${seconds}`; // Formato HH:mm:ss
-  } catch (error) {
-    console.error("Error al extraer la hora:", error);
-    return ""; // Retornar una cadena vacía en caso de error
-  }
-};
-
-const toISOString = (input: Date | string | number[] | null): string => {
-  try {
-    let date: Date;
-
-    if (!input) {
-      throw new Error("Fecha inválida: el valor es nulo o indefinido");
-    }
-
-    // Si es una cadena, intentar convertirla a Date
-    if (typeof input === "string") {
-      date = new Date(input);
-    }
-    // Si es un array, construir la fecha manualmente
-    else if (Array.isArray(input)) {
-      const [year, month, day, hours = 0, minutes = 0, seconds = 0] = input;
-      date = new Date(Date.UTC(year, month - 1, day, hours, minutes, seconds));
-    }
-    // Si es un objeto Date, usarlo directamente
-    else if (input instanceof Date) {
-      date = input;
-    } else {
-      throw new Error("Tipo de entrada no soportado");
-    }
-
-    // Validar que la fecha sea válida
-    if (isNaN(date.getTime())) {
-      throw new Error("Fecha inválida: no se pudo parsear");
-    }
-
-    // Convertir a ISO-8601 en UTC
-    return date.toISOString();
-  } catch (error) {
-    console.error("Error al convertir a ISO-8601:", error);
-    return ""; // Retornar una cadena vacía en caso de error
-  }
-};
+import { extractTime } from "@/utils/helper/extractTime";
+import { AppError } from "@/middleware/errors/AppError";
 
 const transformAttendanceData = (data: any) => {
   const {
@@ -88,16 +36,16 @@ const transformAttendanceData = (data: any) => {
 
   return {
     ...rest,
-    checkIn: toISOString(data.checkIn),
-    checkOut: toISOString(data.checkOut),
+    checkIn: data.checkIn ? new Date(data.checkIn) : null,
+    checkOut: data.checkOut ? new Date(data.checkOut) : null,
   };
 };
 
 const transformAttendanceResponse = (data: any): ReportAttendanceResponse => {
   return {
     ...data,
-    checkIn: extractTime(data.checkIn),
-    checkOut: extractTime(data.checkOut),
+    checkIn: data.checkIn ? new Date(data.checkIn) : null,
+    checkOut: data.checkOut ? new Date(data.checkOut) : null,
   };
 };
 
@@ -127,11 +75,16 @@ export class AttendanceRepository implements IAttendancePort {
   async getAllUsersWithAttendance(
     companyId?: string
   ): Promise<ReportAttendanceResponse[]> {
+    const allowedTypes = Object.values(AsistentType);
+
     const results = await this.prisma.reportAttendance.findMany({
       where: {
         companyId: companyId,
         deletedAt: null,
         status: true,
+        typeAssistanceId: {
+          in: allowedTypes,
+        },
       },
       include: {
         user: true,
@@ -145,7 +98,28 @@ export class AttendanceRepository implements IAttendancePort {
         typePermission: true,
       },
     });
+
     return results.map(transformAttendanceResponse);
+  }
+
+  async findAttendance(data: {
+    userId: string;
+    date: Date;
+  }): Promise<ReportAttendanceResponse | null> {
+    const record = await this.prisma.reportAttendance.findFirst({
+      where: {
+        userId: data.userId,
+        date: data.date,
+      },
+      include: {
+        user: true,
+        company: true,
+        schedule: true,
+        typePermission: true,
+      },
+    });
+
+    return record ? transformAttendanceResponse(record) : null;
   }
 
   async getUserAttendance(userId: string, companyId?: string): Promise<any[]> {
@@ -190,31 +164,21 @@ export class AttendanceRepository implements IAttendancePort {
     roleId: string;
     companyId?: string;
   }): Promise<AttendanceHistory[]> {
+    const allowedTypes = Object.values(AsistentType);
     const { userId, companyId } = user;
     const query = {
-      where: { userId, companyId: companyId || undefined },
+      where: {
+        userId,
+        companyId: companyId || undefined,
+        typeAssistanceId: { in: allowedTypes },
+      },
     };
 
     const records = await this.prisma.reportAttendance.findMany({
       ...query,
-      select: {
-        id: true,
-        userId: true,
-        companyId: true,
-        date: true,
-        checkIn: true,
-        checkOut: true,
-        locationLatitude: true,
-        locationLongitude: true,
-        locationAddress: true,
-        hoursWorked: true,
-        overtimeHours: true,
-        typeAssistanceId: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-        company: true,
+      include: {
         user: true,
+        company: true,
         schedule: true,
         typePermission: true,
       },
@@ -223,24 +187,6 @@ export class AttendanceRepository implements IAttendancePort {
     // Procesar los registros
     const attendanceHistory = records.map((record) => {
       const checkInDate = new Date(record.date).toISOString().split("T")[0]; // Extraer YYYY-MM-DD
-
-      // Función auxiliar para extraer la hora
-      const extractTime = (timestamp: string | null): string => {
-        if (!timestamp) return ""; // Si es nulo o vacío, retornar ""
-        try {
-          const timeOnly = new Date(timestamp)
-            .toISOString()
-            .split("T")[1]
-            .split(".")[0]; // Extraer "HH:mm:ss"
-          return timeOnly.split(":").slice(0, 2).join(":"); // Formatear como "HH:mm"
-        } catch (e) {
-          console.error(
-            `Error extracting time from timestamp: ${timestamp}`,
-            e
-          );
-          return ""; // Retornar "" si hay un error
-        }
-      };
 
       // Procesar checkIn y checkOut usando la función auxiliar
       const checkIn = extractTime(record.checkIn?.toISOString() || null);
@@ -255,9 +201,9 @@ export class AttendanceRepository implements IAttendancePort {
         schedule: record.schedule,
         typePermission: record.typePermission,
         checkInDate: checkInDate,
-        checkIn: checkIn, // Solo la hora (HH:mm)
-        checkOutDate: checkInDate, // Usar la misma fecha
-        checkOut: checkOut, // Solo la hora (HH:mm)
+        checkIn: checkIn,
+        checkOutDate: checkInDate,
+        checkOut: checkOut,
         hoursWorked: record.hoursWorked,
         overtimeHours: record.overtimeHours,
         locationLatitude: record.locationLatitude
@@ -267,7 +213,7 @@ export class AttendanceRepository implements IAttendancePort {
           ? Number(record.locationLongitude)
           : null,
         locationAddress: record.locationAddress || null,
-        typeAssistanceId: record.typeAssistanceId,
+        typeAssistanceId: record.typeAssistanceId as AsistentType,
         status: record.status,
         createdAt: record.createdAt.toISOString(),
         updatedAt: record.updatedAt.toISOString(),
@@ -291,7 +237,9 @@ export class AttendanceRepository implements IAttendancePort {
         locationLatitude: data.locationLatitude,
         locationLongitude: data.locationLongitude,
         locationAddress: data.locationAddress,
-        schedule: { connect: { id: data.scheduleId } },
+        schedule: data.scheduleId
+          ? { connect: { id: data.scheduleId } }
+          : undefined,
         typePermission: data.typePermissionId
           ? { connect: { id: data.typePermissionId } }
           : undefined,
@@ -388,7 +336,7 @@ export class AttendanceRepository implements IAttendancePort {
     });
   }
 
-  async findAllByCompanyAndDateRange(
+  /* async findAllByCompanyAndDateRange(
     companyId: string,
     startDate: Date,
     endDate: Date,
@@ -437,7 +385,7 @@ export class AttendanceRepository implements IAttendancePort {
     // Transformar a tu tipo personalizado
     return attendances.map((record) => ({
       id: record.id,
-      scheduleId: record.scheduleId,
+      scheduleId: record.scheduleId ? record.scheduleId : null,
       schedule: record.schedule as any,
       companyId: record.companyId,
       company: record.company as any,
@@ -463,7 +411,7 @@ export class AttendanceRepository implements IAttendancePort {
       updatedAt: record.updatedAt,
       deletedAt: record.deletedAt,
     }));
-  }
+  } */
 
   async findByUserAndDate(userId: string, date: Date) {
     return this.prisma.reportAttendance.findFirst({
@@ -504,6 +452,50 @@ export class AttendanceRepository implements IAttendancePort {
       where: { id: attendanceId },
     });
     return result ? transformAttendanceResponse(result) : null;
+  }
+
+  async findReportByScheduleId(
+    scheduleId: string,
+    companyId?: string
+  ): Promise<ReportAttendanceResponse[]> {
+    if (!scheduleId) {
+      throw new AppError("scheduleId es obligatorio", 400);
+    }
+
+    const results = await this.prisma.reportAttendance.findMany({
+      where: {
+        scheduleId: scheduleId,
+        companyId: companyId || undefined,
+        status: true,
+      },
+      include: {
+        user: true,
+        company: true,
+        schedule: true,
+      },
+    });
+    return results.map(transformAttendanceResponse);
+  }
+
+  async findScheduleReportByUserId(
+    userId: string,
+    scheduleId: string,
+    companyId?: string
+  ): Promise<ReportAttendanceResponse> {
+    const results = await this.prisma.reportAttendance.findFirst({
+      where: {
+        userId,
+        scheduleId,
+        companyId: companyId || undefined,
+        status: true,
+      },
+      include: {
+        user: true,
+        company: true,
+        schedule: true,
+      },
+    });
+    return transformAttendanceResponse(results);
   }
 
   async findAttendanceByDateAndSchedule(
